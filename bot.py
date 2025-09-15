@@ -61,7 +61,8 @@ async def test_token():
 
 # --- HELPERS ---
 def safe_text(text: str, limit: int = 4000) -> str:
-    """Ensure text length does not exceed Telegram's limit."""
+    """Ensure text length does not exceed Telegram's limit and escape HTML chars."""
+    text = text.replace("<", "&lt;").replace(">", "&gt;")
     if len(text) > limit:
         return text[:limit] + "\n... [truncated]"
     return text
@@ -82,7 +83,7 @@ async def build_report(inbound_ids):
             if ib.get("id") not in inbound_ids:
                 continue
 
-            # --- FIX: parse settings if it's JSON string ---
+            # --- parse settings if JSON string ---
             settings = ib.get("settings")
             if isinstance(settings, str):
                 try:
@@ -125,9 +126,9 @@ async def build_report(inbound_ids):
                   f"⬇️ Download: {hb(total_down)}\n"
                   f"⬆️ Upload: {hb(total_up)}\n"
                   f"🟢 Online: {online_count}\n"
-                  f"⏳ Expiring (<24h): {expiring}\n"
+                  f"⏳ Expiring (&lt;24h): {expiring}\n"
                   f"🚫 Expired: {expired}\n"
-                  f"⚠️ Low traffic (<1GB): {low_traffic}")
+                  f"⚠️ Low traffic (&lt;1GB): {low_traffic}")
         return safe_text(report)
     except Exception as e:
         log_error(e)
