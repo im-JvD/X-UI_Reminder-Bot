@@ -42,6 +42,16 @@ class PanelAPI:
                 txt = txt[:2000] + "... [truncated]"
             return {"error": f"❌ Non-JSON response from panel: {txt}"}
 
+    def _extract_obj(self, data):
+        """اگه جواب دیکشنری باشه و کلید obj داشته باشه، همونو برمی‌گردونیم"""
+        if isinstance(data, dict):
+            if "obj" in data:
+                return data["obj"]
+            # اگه خطا برگشته باشه
+            if "error" in data:
+                return data
+        return data
+
     def inbounds(self):
         self._login()
         r = self.s.get(INB_LIST, timeout=20)
@@ -50,11 +60,7 @@ class PanelAPI:
             r = self.s.get(INB_LIST, timeout=20)
         r.raise_for_status()
         data = self._safe_json(r)
-
-        # پنل X-UI خروجی رو داخل obj می‌فرسته
-        if isinstance(data, dict) and "obj" in data:
-            return data["obj"]
-        return data
+        return self._extract_obj(data)
 
     def online_clients(self):
         self._login()
@@ -64,9 +70,7 @@ class PanelAPI:
             r = self.s.post(ONLINE, timeout=20)
         r.raise_for_status()
         data = self._safe_json(r)
-        if isinstance(data, dict) and "obj" in data:
-            return data["obj"]
-        return data
+        return self._extract_obj(data)
 
     def client_traffics_by_email(self, email):
         self._login()
@@ -76,6 +80,4 @@ class PanelAPI:
             r = self.s.get(TRAFF_EMAIL.format(email=email), timeout=20)
         r.raise_for_status()
         data = self._safe_json(r)
-        if isinstance(data, dict) and "obj" in data:
-            return data["obj"]
-        return data
+        return self._extract_obj(data)
