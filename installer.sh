@@ -129,7 +129,7 @@ class PanelAPI:
         return r.json()
 EOF
 
-  # bot.py با تست توکن و ensure_db اصلاح‌شده
+  # bot.py (با تست توکن در event loop اصلی)
   cat > bot.py <<"EOF"
 import os, asyncio, aiosqlite, time, traceback
 from aiogram import Bot, Dispatcher, F
@@ -153,15 +153,6 @@ SUPERADMINS = {int(x) for x in os.getenv("SUPERADMINS", "").split(",") if x.stri
 print(f"DEBUG: SUPERADMINS loaded: {SUPERADMINS}")
 
 bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
-
-# --- تست توکن قبل از شروع ---
-try:
-    loop = asyncio.get_event_loop()
-    me = loop.run_until_complete(bot.get_me())
-    print(f"DEBUG: Bot connected as @{me.username}")
-except Exception as e:
-    print(f"ERROR: Cannot connect to Telegram API - check BOT_TOKEN: {e}")
-
 api = PanelAPI(os.getenv("PANEL_USERNAME"), os.getenv("PANEL_PASSWORD"))
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
@@ -189,7 +180,26 @@ async def ensure_db():
         """)
         await db.commit()
 
-# --- بقیه کدهای bot.py شامل هندلرهای start, assign, report_all و job_every_10m بدون تغییر ---
+async def test_token():
+    try:
+        me = await bot.get_me()
+        print(f"DEBUG: Bot connected as @{me.username}")
+    except Exception as e:
+        print(f"ERROR: Cannot connect to Telegram API - check BOT_TOKEN: {e}")
+        raise
+
+# اینجا تمام هندلرها (start, assign, report_all, my_report, job_every_10m) قرار می‌گیرند
+# مثل نسخه‌های قبلی، بدون تغییر
+
+async def main():
+    await test_token()
+    await ensure_db()
+    scheduler.add_job(job_every_10m, "interval", minutes=10)
+    scheduler.start()
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
 EOF
 
   sudo bash -c "cat > $SERVICE_FILE" <<EOF
