@@ -1,4 +1,4 @@
-import os, time, requests, json
+import os, time, requests
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -38,31 +38,44 @@ class PanelAPI:
             return response.json()
         except Exception:
             txt = response.text
-            # اگه خیلی طولانی بود کوتاهش کن
             if len(txt) > 2000:
                 txt = txt[:2000] + "... [truncated]"
-            return f"❌ Non-JSON response from panel: {txt}"
+            return {"error": f"❌ Non-JSON response from panel: {txt}"}
 
     def inbounds(self):
         self._login()
         r = self.s.get(INB_LIST, timeout=20)
         if r.status_code == 401:
-            self._login(force=True); r = self.s.get(INB_LIST, timeout=20)
+            self._login(force=True)
+            r = self.s.get(INB_LIST, timeout=20)
         r.raise_for_status()
-        return self._safe_json(r)
+        data = self._safe_json(r)
+
+        # پنل X-UI خروجی رو داخل obj می‌فرسته
+        if isinstance(data, dict) and "obj" in data:
+            return data["obj"]
+        return data
 
     def online_clients(self):
         self._login()
         r = self.s.post(ONLINE, timeout=20)
         if r.status_code == 401:
-            self._login(force=True); r = self.s.post(ONLINE, timeout=20)
+            self._login(force=True)
+            r = self.s.post(ONLINE, timeout=20)
         r.raise_for_status()
-        return self._safe_json(r)
+        data = self._safe_json(r)
+        if isinstance(data, dict) and "obj" in data:
+            return data["obj"]
+        return data
 
     def client_traffics_by_email(self, email):
         self._login()
         r = self.s.get(TRAFF_EMAIL.format(email=email), timeout=20)
         if r.status_code == 401:
-            self._login(force=True); r = self.s.get(TRAFF_EMAIL.format(email=email), timeout=20)
+            self._login(force=True)
+            r = self.s.get(TRAFF_EMAIL.format(email=email), timeout=20)
         r.raise_for_status()
-        return self._safe_json(r)
+        data = self._safe_json(r)
+        if isinstance(data, dict) and "obj" in data:
+            return data["obj"]
+        return data
