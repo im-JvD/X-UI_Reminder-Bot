@@ -1,4 +1,4 @@
-import os, asyncio, aiosqlite, time, traceback
+import os, asyncio, aiosqlite, time, traceback, json
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
@@ -81,7 +81,19 @@ async def build_report(inbound_ids):
                 continue
             if ib.get("id") not in inbound_ids:
                 continue
-            clients = ib.get("settings", {}).get("clients", ib.get("clients", []))
+
+            # --- FIX: parse settings if it's JSON string ---
+            settings = ib.get("settings")
+            if isinstance(settings, str):
+                try:
+                    settings = json.loads(settings)
+                except Exception:
+                    settings = {}
+            if not isinstance(settings, dict):
+                settings = {}
+
+            clients = settings.get("clients", ib.get("clients", []))
+
             for c in clients:
                 total_users += 1
                 up, down = int(c.get("up", 0)), int(c.get("down", 0))
@@ -89,7 +101,7 @@ async def build_report(inbound_ids):
                 total_down += down
                 if c.get("email") in online_emails:
                     online_count += 1
-                quota = int(c.get("total", 0))
+                quota = int(c.get("total", 0) or c.get("totalGB", 0))
                 used = up + down
                 if quota > 0 and (quota - used) < 1024**3:
                     low_traffic += 1
