@@ -1,4 +1,4 @@
-import os, time, requests
+import os, time, requests, json
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -32,13 +32,24 @@ class PanelAPI:
         print(f"DEBUG: Login successful, cookies: {list(self.s.cookies.keys())}")
         self.last_login = time.time()
 
+    def _safe_json(self, response):
+        """تبدیل خروجی به JSON یا برگردوندن متن خطا"""
+        try:
+            return response.json()
+        except Exception:
+            txt = response.text
+            # اگه خیلی طولانی بود کوتاهش کن
+            if len(txt) > 2000:
+                txt = txt[:2000] + "... [truncated]"
+            return f"❌ Non-JSON response from panel: {txt}"
+
     def inbounds(self):
         self._login()
         r = self.s.get(INB_LIST, timeout=20)
         if r.status_code == 401:
             self._login(force=True); r = self.s.get(INB_LIST, timeout=20)
         r.raise_for_status()
-        return r.json()
+        return self._safe_json(r)
 
     def online_clients(self):
         self._login()
@@ -46,7 +57,7 @@ class PanelAPI:
         if r.status_code == 401:
             self._login(force=True); r = self.s.post(ONLINE, timeout=20)
         r.raise_for_status()
-        return r.json()
+        return self._safe_json(r)
 
     def client_traffics_by_email(self, email):
         self._login()
@@ -54,4 +65,4 @@ class PanelAPI:
         if r.status_code == 401:
             self._login(force=True); r = self.s.get(TRAFF_EMAIL.format(email=email), timeout=20)
         r.raise_for_status()
-        return r.json()
+        return self._safe_json(r)
