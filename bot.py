@@ -59,12 +59,19 @@ async def test_token():
         print(f"ERROR: Cannot connect to Telegram API - check BOT_TOKEN: {e}")
         raise
 
+# --- HELPERS ---
+def safe_text(text: str, limit: int = 4000) -> str:
+    """Ensure text length does not exceed Telegram's limit."""
+    if len(text) > limit:
+        return text[:limit] + "\n... [truncated]"
+    return text
+
 # --- REPORT BUILDER ---
 async def build_report(inbound_ids):
     try:
         data = api.inbounds()
         if not isinstance(data, list):
-            return f"❌ Invalid response from panel: {data}"
+            return safe_text(f"❌ Invalid response from panel: {data}")
 
         online_emails = set(api.online_clients() or [])
         total_users = total_up = total_down = expiring = expired = online_count = low_traffic = 0
@@ -101,14 +108,15 @@ async def build_report(inbound_ids):
                 n /= 1024
             return f"{n:.1f} PB"
 
-        return (f"📊 Report:\n"
-                f"👥 Users: {total_users}\n"
-                f"⬇️ Download: {hb(total_down)}\n"
-                f"⬆️ Upload: {hb(total_up)}\n"
-                f"🟢 Online: {online_count}\n"
-                f"⏳ Expiring (<24h): {expiring}\n"
-                f"🚫 Expired: {expired}\n"
-                f"⚠️ Low traffic (<1GB): {low_traffic}")
+        report = (f"📊 Report:\n"
+                  f"👥 Users: {total_users}\n"
+                  f"⬇️ Download: {hb(total_down)}\n"
+                  f"⬆️ Upload: {hb(total_up)}\n"
+                  f"🟢 Online: {online_count}\n"
+                  f"⏳ Expiring (<24h): {expiring}\n"
+                  f"🚫 Expired: {expired}\n"
+                  f"⚠️ Low traffic (<1GB): {low_traffic}")
+        return safe_text(report)
     except Exception as e:
         log_error(e)
         return "❌ Error while generating report. Check log.txt"
@@ -159,12 +167,12 @@ async def report_all(m: Message):
 
     data = api.inbounds()
     if not isinstance(data, list):
-        await m.answer(f"❌ Unexpected response from panel:\n{data}")
+        await m.answer(safe_text(f"❌ Unexpected response from panel:\n{data}"))
         return
 
     all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
     report = await build_report(all_ids)
-    await m.answer("📢 Full Panel Report:\n" + report)
+    await m.answer("📢 Full Panel Report:\n" + safe_text(report))
 
 @dp.message(F.text == "📊 My Inbounds Report")
 async def my_report(m: Message):
@@ -174,7 +182,7 @@ async def my_report(m: Message):
         await m.answer("No inbound assigned to you.")
         return
     report = await build_report([r[0] for r in rows])
-    await m.answer(report)
+    await m.answer(safe_text(report))
 
 # --- SCHEDULED JOB ---
 async def job_every_10m():
@@ -187,7 +195,7 @@ async def job_every_10m():
             inbound_ids = [r[0] for r in ibs]
             rep = await build_report(inbound_ids)
             try:
-                await bot.send_message(tg, "⏱ 10-min report:\n" + rep)
+                await bot.send_message(tg, "⏱ 10-min report:\n" + safe_text(rep))
             except Exception:
                 pass
     except Exception as e:
