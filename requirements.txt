@@ -1,0 +1,6 @@
+aiogram>=3.7
+requests
+apscheduler
+python-dotenv
+aiosqlite
+tzlocal
