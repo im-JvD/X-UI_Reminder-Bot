@@ -63,10 +63,15 @@ async def test_token():
 async def build_report(inbound_ids):
     try:
         data = api.inbounds()
+        if not isinstance(data, list):
+            return f"❌ Invalid response from panel: {data}"
+
         online_emails = set(api.online_clients() or [])
         total_users = total_up = total_down = expiring = expired = online_count = low_traffic = 0
 
         for ib in data:
+            if not isinstance(ib, dict):
+                continue
             if ib.get("id") not in inbound_ids:
                 continue
             clients = ib.get("settings", {}).get("clients", ib.get("clients", []))
@@ -151,8 +156,13 @@ async def report_all(m: Message):
     if m.from_user.id not in SUPERADMINS:
         await m.answer("⛔️ Access denied.")
         return
+
     data = api.inbounds()
-    all_ids = [ib.get("id") for ib in data]
+    if not isinstance(data, list):
+        await m.answer(f"❌ Unexpected response from panel:\n{data}")
+        return
+
+    all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
     report = await build_report(all_ids)
     await m.answer("📢 Full Panel Report:\n" + report)
 
