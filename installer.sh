@@ -23,7 +23,7 @@ show_menu() {
   echo -e "${BLUE}========================================${NC}"
   echo -e "${GREEN}1)${NC} Install Bot"
   echo -e "${GREEN}2)${NC} Start/Restart Bot"
-  echo -e "${GREEN}3)${NC} Update Bot (Reinstall source, keep .env & DB)"
+  echo -e "${GREEN}3)${NC} Update Bot (keep .env & DB)"
   echo -e "${RED}4) Remove Bot (full wipe)${NC}"
   echo -e "${BLUE}5) Show Last 100 Log Lines${NC}"
   echo -e "${BLUE}6) Show Live Logs${NC}"
@@ -66,11 +66,32 @@ install_bot() {
   pip install --upgrade pip
   pip install -r requirements.txt
 
-  if [ ! -f ".env" ]; then
-    echo -e "${YELLOW}🔑 Please configure your bot (.env will be created)${NC}"
-    cp .env.example .env
-    nano .env
-  fi
+  echo -e "${YELLOW}🔑 Please enter required information:${NC}"
+  read -p "Telegram Bot Token: " BOT_TOKEN
+  read -p "Required Channel Username or ID (e.g. @MyChannel): " CHANNEL
+  read -p "Super Admin Telegram ID(s, comma separated): " SUPERADMIN
+  echo ""
+  echo -e "${YELLOW}Enter your FULL 3X-UI panel URL (including schema, port, and base path if any):${NC}"
+  echo -e "${BLUE}Example:${NC} https://sub.example.com:2053/webbasepath"
+  read -p "Panel Full URL: " FULL_URL
+  read -p "Panel Username: " PANEL_USER
+  read -p "Panel Password: " PANEL_PASS
+
+  PANEL_BASE=$(echo $FULL_URL | sed -E 's#(https?://[^/]+).*#\1#')
+  WEBBASEPATH=$(echo $FULL_URL | sed -E 's#https?://[^/]+(/.*)?#\1#')
+
+  echo -e "${GREEN}✅ Detected PANEL_BASE=$PANEL_BASE${NC}"
+  echo -e "${GREEN}✅ Detected WEBBASEPATH=${WEBBASEPATH:-'(none)'}${NC}"
+
+  cat > .env <<EOF
+BOT_TOKEN=$BOT_TOKEN
+REQUIRED_CHANNEL_ID=$CHANNEL
+SUPERADMINS=$SUPERADMIN
+PANEL_BASE=$PANEL_BASE
+WEBBASEPATH=$WEBBASEPATH
+PANEL_USERNAME=$PANEL_USER
+PANEL_PASSWORD=$PANEL_PASS
+EOF
 
   ensure_service
   sudo systemctl enable reseller-report-bot
@@ -98,11 +119,10 @@ update_bot() {
   fi
 
   cd "$INSTALL_DIR"
-  # پشتیبان‌گیری از env و DB
+  # پشتیبان env و DB
   cp .env /tmp/.env.backup 2>/dev/null || true
   cp *.db /tmp/ 2>/dev/null || true
 
-  # آپدیت کامل از گیت‌هاب
   git fetch --all
   git reset --hard origin/main
 
