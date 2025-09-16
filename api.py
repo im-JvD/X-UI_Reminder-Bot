@@ -23,18 +23,14 @@ class PanelAPI:
         r = self.session.get(url, verify=False)
         return r.json().get("obj", [])
 
-    # --- متد جدید برای گرفتن مصرف کاربران ---
+    # --- متد امن برای گرفتن مصرف کاربران ---
     def client_traffics(self, inbound_id: int):
-        """
-        گرفتن ترافیک مصرفی کاربران یک اینباند
-        :param inbound_id: شناسه اینباند
-        :return: dict {email: {"up": int, "down": int}}
-        """
         url = f"{self.base}{self.path}/panel/api/inbounds/getClientTraffics/{inbound_id}"
-        r = self.session.get(url, verify=False)
-        if r.status_code != 200:
-            return {}
         try:
+            r = self.session.get(url, verify=False, timeout=10)
+            if r.status_code != 200:
+                print(f"DEBUG: client_traffics failed with status {r.status_code}")
+                return {}
             data = r.json().get("obj", [])
             traffics = {}
             for c in data:
@@ -44,5 +40,6 @@ class PanelAPI:
                     "down": int(c.get("down", 0))
                 }
             return traffics
-        except Exception:
+        except Exception as e:
+            print(f"DEBUG: client_traffics exception for inbound {inbound_id}: {e}")
             return {}
