@@ -1,3 +1,4 @@
+# Version: 1.0.0 - Stable
 import os, asyncio, aiosqlite, time, traceback, json
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
@@ -232,6 +233,8 @@ async def send_full_reports():
                 await db.commit()
         except Exception as e:
             log_error(e)
+
+    # superadmins full panel
     data = api.inbounds()
     if isinstance(data, list):
         all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
@@ -239,11 +242,16 @@ async def send_full_reports():
         for tg in SUPERADMINS:
             try:
                 await bot.send_message(tg, "📢 Daily Full Panel Report:\n" + safe_text(report))
+                async with aiosqlite.connect("data.db") as db:
+                    await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)",
+                                     (tg, json.dumps(details), int(time.time())))
+                    await db.commit()
             except Exception as e:
                 log_error(e)
 
 async def check_changes():
     """Check inbound status every 1m and send only changes (resellers + superadmins)."""
+    # resellers
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     for (tg,) in rows:
@@ -276,20 +284,35 @@ async def check_changes():
                              (tg, json.dumps(details), int(time.time())))
             await db.commit()
 
+    # superadmins diff
     data = api.inbounds()
     if isinstance(data, list):
         all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
         _, details = await build_report(all_ids)
         for tg in SUPERADMINS:
-            try:
+            async with aiosqlite.connect("data.db") as db:
+                cursor = await db.execute("SELECT last_json FROM last_reports WHERE telegram_id=?", (tg,))
+                row = await cursor.fetchone()
+                last = json.loads(row[0]) if row and row[0] else {"expiring": [], "expired": []}
+
+            new_expiring = [u for u in details["expiring"] if u not in last["expiring"]]
+            new_expired = [u for u in details["expired"] if u not in last["expired"]]
+
+            if new_expiring or new_expired:
                 msg = "📢 SuperAdmin - Panel Changes:\n"
-                if details["expiring"]:
-                    msg += "⏳ Expiring:\n" + "\n".join(details["expiring"]) + "\n"
-                if details["expired"]:
-                    msg += "🚫 Expired:\n" + "\n".join(details["expired"])
-                await bot.send_message(tg, safe_text(msg))
-            except Exception as e:
-                log_error(e)
+                if new_expiring:
+                    msg += "⏳ Newly Expiring:\n" + "\n".join(new_expiring) + "\n"
+                if new_expired:
+                    msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
+                try:
+                    await bot.send_message(tg, safe_text(msg))
+                except Exception as e:
+                    log_error(e)
+
+            async with aiosqlite.connect("data.db") as db:
+                await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)",
+                                 (tg, json.dumps(details), int(time.time())))
+                await db.commit()
 
 # --- MAIN ---
 async def main():
