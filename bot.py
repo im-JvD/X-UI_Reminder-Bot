@@ -47,6 +47,11 @@ async def ensure_db():
             inbound_id INTEGER,
             PRIMARY KEY (telegram_id, inbound_id)
         );
+        CREATE TABLE IF NOT EXISTS last_reports (
+            telegram_id INTEGER PRIMARY KEY,
+            last_json TEXT,
+            last_full_report INTEGER
+        );
         """)
         await db.commit()
 
@@ -67,7 +72,60 @@ def safe_text(text: str, limit: int = 4000) -> str:
         return text[:limit] + "\n... [truncated]"
     return text
 
+def hb(n):
+    for u in ["B", "KB", "MB", "GB", "TB"]:
+        if n < 1024:
+            return f"{n:.0f} {u}"
+        n /= 1024
+    return f"{n:.1f} PB"
+
 # --- REPORT BUILDER ---
+def analyze_inbound(ib, online_emails):
+    """Extract stats + user statuses from inbound dict."""
+    stats = {
+        "users": 0, "up": 0, "down": 0,
+        "online": 0, "expiring": [], "expired": []
+    }
+    if not isinstance(ib, dict):
+        return stats
+
+    # parse settings if JSON string
+    settings = ib.get("settings")
+    if isinstance(settings, str):
+        try:
+            settings = json.loads(settings)
+        except Exception:
+            settings = {}
+    if not isinstance(settings, dict):
+        settings = {}
+
+    clients = settings.get("clients", ib.get("clients", []))
+
+    for c in clients:
+        stats["users"] += 1
+        up, down = int(c.get("up", 0)), int(c.get("down", 0))
+        stats["up"] += up
+        stats["down"] += down
+        if c.get("email") in online_emails:
+            stats["online"] += 1
+
+        # quota
+        quota = int(c.get("total", 0) or c.get("totalGB", 0))
+        used = up + down
+        left = quota - used if quota > 0 else None
+
+        # expiry
+        exp = int(c.get("expiryTime", 0) or c.get("expire", 0))
+        rem = (exp / 1000) - time.time() if exp > 0 else None
+
+        # conditions
+        if (left is not None and left <= 1024**3) or (rem is not None and 0 < rem <= 24 * 3600):
+            stats["expiring"].append(c.get("email", "unknown"))
+        if (rem is not None and rem <= 0) or (left is not None and left <= 0):
+            stats["expired"].append(c.get("email", "unknown"))
+
+    return stats
+
 async def build_report(inbound_ids):
     try:
         data = api.inbounds()
@@ -75,64 +133,32 @@ async def build_report(inbound_ids):
             return safe_text(f"❌ Invalid response from panel: {data}")
 
         online_emails = set(api.online_clients() or [])
-        total_users = total_up = total_down = expiring = expired = online_count = low_traffic = 0
+        total_users = total_up = total_down = online_count = 0
+        expiring = []
+        expired = []
 
         for ib in data:
-            if not isinstance(ib, dict):
+            if not isinstance(ib, dict) or ib.get("id") not in inbound_ids:
                 continue
-            if ib.get("id") not in inbound_ids:
-                continue
-
-            # --- parse settings if JSON string ---
-            settings = ib.get("settings")
-            if isinstance(settings, str):
-                try:
-                    settings = json.loads(settings)
-                except Exception:
-                    settings = {}
-            if not isinstance(settings, dict):
-                settings = {}
-
-            clients = settings.get("clients", ib.get("clients", []))
-
-            for c in clients:
-                total_users += 1
-                up, down = int(c.get("up", 0)), int(c.get("down", 0))
-                total_up += up
-                total_down += down
-                if c.get("email") in online_emails:
-                    online_count += 1
-                quota = int(c.get("total", 0) or c.get("totalGB", 0))
-                used = up + down
-                if quota > 0 and (quota - used) < 1024**3:
-                    low_traffic += 1
-                exp = int(c.get("expiryTime", 0) or c.get("expire", 0))
-                if exp > 0:
-                    rem = (exp / 1000) - time.time()
-                    if 0 < rem <= 24 * 3600:
-                        expiring += 1
-                    if rem <= 0:
-                        expired += 1
-
-        def hb(n):
-            for u in ["B", "KB", "MB", "GB", "TB"]:
-                if n < 1024:
-                    return f"{n:.0f} {u}"
-                n /= 1024
-            return f"{n:.1f} PB"
+            s = analyze_inbound(ib, online_emails)
+            total_users += s["users"]
+            total_up += s["up"]
+            total_down += s["down"]
+            online_count += s["online"]
+            expiring.extend(s["expiring"])
+            expired.extend(s["expired"])
 
         report = (f"📊 Report:\n"
                   f"👥 Users: {total_users}\n"
                   f"⬇️ Download: {hb(total_down)}\n"
                   f"⬆️ Upload: {hb(total_up)}\n"
                   f"🟢 Online: {online_count}\n"
-                  f"⏳ Expiring (&lt;24h): {expiring}\n"
-                  f"🚫 Expired: {expired}\n"
-                  f"⚠️ Low traffic (&lt;1GB): {low_traffic}")
-        return safe_text(report)
+                  f"⏳ Expiring (&lt;24h or &lt;1GB): {len(expiring)}\n"
+                  f"🚫 Expired: {len(expired)}")
+        return safe_text(report), {"expiring": expiring, "expired": expired}
     except Exception as e:
         log_error(e)
-        return "❌ Error while generating report. Check log.txt"
+        return "❌ Error while generating report. Check log.txt", {"expiring": [], "expired": []}
 
 # --- HANDLERS ---
 @dp.message(Command("start"))
@@ -153,7 +179,6 @@ async def start(m: Message):
 
 @dp.message(Command("assign"))
 async def assign_inbound(m: Message):
-    print(f"DEBUG: Checking admin: from_user.id={m.from_user.id}, SUPERADMINS={SUPERADMINS}")
     if m.from_user.id not in SUPERADMINS:
         await m.answer("⛔️ Access denied.")
         return
@@ -177,14 +202,12 @@ async def report_all(m: Message):
     if m.from_user.id not in SUPERADMINS:
         await m.answer("⛔️ Access denied.")
         return
-
     data = api.inbounds()
     if not isinstance(data, list):
         await m.answer(safe_text(f"❌ Unexpected response from panel:\n{data}"))
         return
-
     all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
-    report = await build_report(all_ids)
+    report, _ = await build_report(all_ids)
     await m.answer("📢 Full Panel Report:\n" + safe_text(report))
 
 @dp.message(F.text == "📊 My Inbounds Report")
@@ -194,31 +217,67 @@ async def my_report(m: Message):
     if not rows:
         await m.answer("No inbound assigned to you.")
         return
-    report = await build_report([r[0] for r in rows])
+    report, _ = await build_report([r[0] for r in rows])
     await m.answer(safe_text(report))
 
-# --- SCHEDULED JOB ---
-async def job_every_10m():
-    try:
+# --- JOBS ---
+async def send_full_reports():
+    """Send full report every 24h to each reseller."""
+    async with aiosqlite.connect("data.db") as db:
+        rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
+    for (tg,) in rows:
         async with aiosqlite.connect("data.db") as db:
-            rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
-        for (tg,) in rows:
+            ibs = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (tg,))
+        inbound_ids = [r[0] for r in ibs]
+        report, details = await build_report(inbound_ids)
+        try:
+            await bot.send_message(tg, "📢 Daily Full Report:\n" + safe_text(report))
             async with aiosqlite.connect("data.db") as db:
-                ibs = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (tg,))
-            inbound_ids = [r[0] for r in ibs]
-            rep = await build_report(inbound_ids)
+                await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)",
+                                 (tg, json.dumps(details), int(time.time())))
+                await db.commit()
+        except Exception as e:
+            log_error(e)
+
+async def check_changes():
+    """Check inbound status every 30m and send only changes."""
+    async with aiosqlite.connect("data.db") as db:
+        rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
+    for (tg,) in rows:
+        async with aiosqlite.connect("data.db") as db:
+            ibs = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (tg,))
+        inbound_ids = [r[0] for r in ibs]
+        _, details = await build_report(inbound_ids)
+
+        async with aiosqlite.connect("data.db") as db:
+            row = await db.execute_fetchone("SELECT last_json FROM last_reports WHERE telegram_id=?", (tg,))
+            last = json.loads(row[0]) if row and row[0] else {"expiring": [], "expired": []}
+
+        new_expiring = [u for u in details["expiring"] if u not in last["expiring"]]
+        new_expired = [u for u in details["expired"] if u not in last["expired"]]
+
+        if new_expiring or new_expired:
+            msg = "📢 Changes detected:\n"
+            if new_expiring:
+                msg += "⏳ Newly Expiring (<24h or <1GB):\n" + "\n".join(new_expiring) + "\n"
+            if new_expired:
+                msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
             try:
-                await bot.send_message(tg, "⏱ 10-min report:\n" + safe_text(rep))
-            except Exception:
-                pass
-    except Exception as e:
-        log_error(e)
+                await bot.send_message(tg, safe_text(msg))
+            except Exception as e:
+                log_error(e)
+
+        async with aiosqlite.connect("data.db") as db:
+            await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)",
+                             (tg, json.dumps(details), int(time.time())))
+            await db.commit()
 
 # --- MAIN ---
 async def main():
     await test_token()
     await ensure_db()
-    scheduler.add_job(job_every_10m, "interval", minutes=10)
+    scheduler.add_job(send_full_reports, "interval", hours=24)
+    scheduler.add_job(check_changes, "interval", minutes=30)
     scheduler.start()
     await dp.start_polling(bot)
 
