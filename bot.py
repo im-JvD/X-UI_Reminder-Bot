@@ -87,7 +87,6 @@ def analyze_inbound(ib, online_emails):
     if not isinstance(ib, dict):
         return stats
 
-    # parse settings if JSON string
     settings = ib.get("settings")
     if isinstance(settings, str):
         try:
@@ -107,16 +106,14 @@ def analyze_inbound(ib, online_emails):
         if c.get("email") in online_emails:
             stats["online"] += 1
 
-        # quota
         quota = int(c.get("total", 0) or c.get("totalGB", 0))
         used = up + down
         left = quota - used if quota > 0 else None
 
-        # expiry
         exp = int(c.get("expiryTime", 0) or c.get("expire", 0))
         rem = (exp / 1000) - time.time() if exp > 0 else None
 
-        # conditions (first check expired, then expiring)
+        # اول expired بعد expiring
         if (rem is not None and rem <= 0) or (left is not None and left <= 0):
             stats["expired"].append(c.get("email", "unknown"))
         elif (left is not None and left <= 1024**3) or (rem is not None and 0 < rem <= 24 * 3600):
@@ -132,8 +129,7 @@ async def build_report(inbound_ids):
 
         online_emails = set(api.online_clients() or [])
         total_users = total_up = total_down = online_count = 0
-        expiring = []
-        expired = []
+        expiring, expired = [], []
 
         for ib in data:
             if not isinstance(ib, dict) or ib.get("id") not in inbound_ids:
@@ -221,7 +217,6 @@ async def my_report(m: Message):
 # --- JOBS ---
 async def send_full_reports():
     """Send full report every 24h to each reseller + superadmins."""
-    # resellers
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     for (tg,) in rows:
@@ -237,7 +232,6 @@ async def send_full_reports():
                 await db.commit()
         except Exception as e:
             log_error(e)
-    # superadmins (all panel)
     data = api.inbounds()
     if isinstance(data, list):
         all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
@@ -250,7 +244,6 @@ async def send_full_reports():
 
 async def check_changes():
     """Check inbound status every 1m and send only changes (resellers + superadmins)."""
-    # resellers
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     for (tg,) in rows:
@@ -260,7 +253,8 @@ async def check_changes():
         _, details = await build_report(inbound_ids)
 
         async with aiosqlite.connect("data.db") as db:
-            row = await db.execute_fetchone("SELECT last_json FROM last_reports WHERE telegram_id=?", (tg,))
+            cursor = await db.execute("SELECT last_json FROM last_reports WHERE telegram_id=?", (tg,))
+            row = await cursor.fetchone()
             last = json.loads(row[0]) if row and row[0] else {"expiring": [], "expired": []}
 
         new_expiring = [u for u in details["expiring"] if u not in last["expiring"]]
@@ -282,7 +276,6 @@ async def check_changes():
                              (tg, json.dumps(details), int(time.time())))
             await db.commit()
 
-    # superadmins (all panel)
     data = api.inbounds()
     if isinstance(data, list):
         all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
@@ -303,7 +296,7 @@ async def main():
     await test_token()
     await ensure_db()
     scheduler.add_job(send_full_reports, "interval", hours=24)
-    scheduler.add_job(check_changes, "interval", minutes=1)
+    scheduler.add_job(check_changes, "interval", minutes=1)  # تست روی 1 دقیقه
     scheduler.start()
     await dp.start_polling(bot)
 
