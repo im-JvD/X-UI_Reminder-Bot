@@ -110,7 +110,6 @@ def analyze_inbound(ib, online_emails):
         exp = int(c.get("expiryTime", 0) or c.get("expire", 0))
         rem = (exp / 1000) - time.time() if exp > 0 else None
 
-        # expired یا expiring
         if (rem is not None and rem <= 0) or (left is not None and left <= 0):
             stats["expired"].append(c.get("email", "unknown"))
         elif (left is not None and left <= 1024**3) or (rem is not None and 0 < rem <= 24 * 3600):
@@ -122,7 +121,7 @@ async def build_report(inbound_ids):
     try:
         data = api.inbounds()
         if not isinstance(data, list):
-            return safe_text(f"❌ Invalid response from panel: {data}"), {"expiring": [], "expired": []}
+            return safe_text(f"❌ Invalid response from panel: {data}"), {"expiring": [], "expired": [], "up": 0, "down": 0}
 
         online_emails = set(api.online_clients() or [])
         total_users = total_up = total_down = online_count = 0
@@ -141,15 +140,15 @@ async def build_report(inbound_ids):
 
         report = (f"📊 Report:\n"
                   f"👥 Users: {total_users}\n"
-                  f"⬇️ Download: {hb(total_down)}\n"
-                  f"⬆️ Upload: {hb(total_up)}\n"
+                  f"📦 Used Traffic: {hb(total_up + total_down)} "
+                  f"(⬇️ {hb(total_down)} + ⬆️ {hb(total_up)})\n"
                   f"🟢 Online: {online_count}\n"
                   f"⏳ Expiring (&lt;24h or &lt;1GB): {len(expiring)}\n"
                   f"🚫 Expired: {len(expired)}")
-        return safe_text(report), {"expiring": expiring, "expired": expired}
+        return safe_text(report), {"expiring": expiring, "expired": expired, "up": total_up, "down": total_down}
     except Exception as e:
         log_error(e)
-        return "❌ Error while generating report. Check log.txt", {"expiring": [], "expired": []}
+        return "❌ Error while generating report. Check log.txt", {"expiring": [], "expired": [], "up": 0, "down": 0}
 
 # --- HANDLERS ---
 @dp.message(Command("start"))
@@ -260,13 +259,15 @@ async def check_changes():
         async with aiosqlite.connect("data.db") as db:
             cursor = await db.execute("SELECT last_json FROM last_reports WHERE telegram_id=?", (tg,))
             row = await cursor.fetchone()
-            last = json.loads(row[0]) if row and row[0] else {"expiring": [], "expired": []}
+            last = json.loads(row[0]) if row and row[0] else {"expiring": [], "expired": [], "up": 0, "down": 0}
 
         new_expiring = [u for u in details["expiring"] if u not in last["expiring"]]
         new_expired = [u for u in details["expired"] if u not in last["expired"]]
 
         if new_expiring or new_expired:
-            msg = "📢 Changes detected:\n"
+            msg = (f"📦 Used Traffic: {hb(details['up'] + details['down'])} "
+                   f"(⬇️ {hb(details['down'])} + ⬆️ {hb(details['up'])})\n")
+            msg += "📢 Changes detected:\n"
             if new_expiring:
                 msg += "⏳ Newly Expiring (&lt;24h or &lt;1GB):\n" + "\n".join(new_expiring) + "\n"
             if new_expired:
@@ -290,13 +291,15 @@ async def check_changes():
             async with aiosqlite.connect("data.db") as db:
                 cursor = await db.execute("SELECT last_json FROM last_reports WHERE telegram_id=?", (tg,))
                 row = await cursor.fetchone()
-                last = json.loads(row[0]) if row and row[0] else {"expiring": [], "expired": []}
+                last = json.loads(row[0]) if row and row[0] else {"expiring": [], "expired": [], "up": 0, "down": 0}
 
             new_expiring = [u for u in details["expiring"] if u not in last["expiring"]]
             new_expired = [u for u in details["expired"] if u not in last["expired"]]
 
             if new_expiring or new_expired:
-                msg = "📢 SuperAdmin - Panel Changes:\n"
+                msg = (f"📦 Used Traffic: {hb(details['up'] + details['down'])} "
+                       f"(⬇️ {hb(details['down'])} + ⬆️ {hb(details['up'])})\n")
+                msg += "📢 SuperAdmin - Panel Changes:\n"
                 if new_expiring:
                     msg += "⏳ Newly Expiring:\n" + "\n".join(new_expiring) + "\n"
                 if new_expired:
