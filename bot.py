@@ -99,6 +99,7 @@ def analyze_inbound(ib, online_emails):
         stats["users"] += 1
 
         # --- فیکس مقادیر up/down ---
+        print("DEBUG CLIENT:", c)
         up = int(c.get("up", c.get("upload", c.get("uplink", 0))))
         down = int(c.get("down", c.get("download", c.get("downlink", 0))))
         stats["up"] += up
