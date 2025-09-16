@@ -97,9 +97,13 @@ def analyze_inbound(ib, online_emails):
     clients = settings.get("clients", ib.get("clients", []))
     for c in clients:
         stats["users"] += 1
-        up, down = int(c.get("up", 0)), int(c.get("down", 0))
+
+        # --- فیکس مقادیر up/down ---
+        up = int(c.get("up", c.get("upload", c.get("uplink", 0))))
+        down = int(c.get("down", c.get("download", c.get("downlink", 0))))
         stats["up"] += up
         stats["down"] += down
+
         if c.get("email") in online_emails:
             stats["online"] += 1
 
