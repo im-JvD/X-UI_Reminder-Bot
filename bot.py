@@ -66,7 +66,6 @@ async def test_token():
 
 # --- HELPERS ---
 def safe_text(text: str, limit: int = 4000) -> str:
-    """Ensure text length does not exceed Telegram's limit and escape HTML chars."""
     text = text.replace("<", "&lt;").replace(">", "&gt;")
     if len(text) > limit:
         return text[:limit] + "\n... [truncated]"
@@ -81,7 +80,6 @@ def hb(n):
 
 # --- REPORT BUILDER ---
 def analyze_inbound(ib, online_emails):
-    """Extract stats + user statuses from inbound dict."""
     stats = {
         "users": 0, "up": 0, "down": 0,
         "online": 0, "expiring": [], "expired": []
@@ -118,11 +116,11 @@ def analyze_inbound(ib, online_emails):
         exp = int(c.get("expiryTime", 0) or c.get("expire", 0))
         rem = (exp / 1000) - time.time() if exp > 0 else None
 
-        # conditions
-        if (left is not None and left <= 1024**3) or (rem is not None and 0 < rem <= 24 * 3600):
-            stats["expiring"].append(c.get("email", "unknown"))
+        # conditions (first check expired, then expiring)
         if (rem is not None and rem <= 0) or (left is not None and left <= 0):
             stats["expired"].append(c.get("email", "unknown"))
+        elif (left is not None and left <= 1024**3) or (rem is not None and 0 < rem <= 24 * 3600):
+            stats["expiring"].append(c.get("email", "unknown"))
 
     return stats
 
@@ -130,7 +128,7 @@ async def build_report(inbound_ids):
     try:
         data = api.inbounds()
         if not isinstance(data, list):
-            return safe_text(f"❌ Invalid response from panel: {data}")
+            return safe_text(f"❌ Invalid response from panel: {data}"), {"expiring": [], "expired": []}
 
         online_emails = set(api.online_clients() or [])
         total_users = total_up = total_down = online_count = 0
@@ -222,7 +220,8 @@ async def my_report(m: Message):
 
 # --- JOBS ---
 async def send_full_reports():
-    """Send full report every 24h to each reseller."""
+    """Send full report every 24h to each reseller + superadmins."""
+    # resellers
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     for (tg,) in rows:
@@ -238,9 +237,20 @@ async def send_full_reports():
                 await db.commit()
         except Exception as e:
             log_error(e)
+    # superadmins (all panel)
+    data = api.inbounds()
+    if isinstance(data, list):
+        all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
+        report, details = await build_report(all_ids)
+        for tg in SUPERADMINS:
+            try:
+                await bot.send_message(tg, "📢 Daily Full Panel Report:\n" + safe_text(report))
+            except Exception as e:
+                log_error(e)
 
 async def check_changes():
-    """Check inbound status every 30m and send only changes."""
+    """Check inbound status every 30m and send only changes (resellers + superadmins)."""
+    # resellers
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     for (tg,) in rows:
@@ -259,7 +269,7 @@ async def check_changes():
         if new_expiring or new_expired:
             msg = "📢 Changes detected:\n"
             if new_expiring:
-                msg += "⏳ Newly Expiring (<24h or <1GB):\n" + "\n".join(new_expiring) + "\n"
+                msg += "⏳ Newly Expiring (&lt;24h or &lt;1GB):\n" + "\n".join(new_expiring) + "\n"
             if new_expired:
                 msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
             try:
@@ -271,6 +281,22 @@ async def check_changes():
             await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)",
                              (tg, json.dumps(details), int(time.time())))
             await db.commit()
+
+    # superadmins (all panel)
+    data = api.inbounds()
+    if isinstance(data, list):
+        all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
+        _, details = await build_report(all_ids)
+        for tg in SUPERADMINS:
+            try:
+                msg = "📢 SuperAdmin - Panel Changes:\n"
+                if details["expiring"]:
+                    msg += "⏳ Expiring:\n" + "\n".join(details["expiring"]) + "\n"
+                if details["expired"]:
+                    msg += "🚫 Expired:\n" + "\n".join(details["expired"])
+                await bot.send_message(tg, safe_text(msg))
+            except Exception as e:
+                log_error(e)
 
 # --- MAIN ---
 async def main():
