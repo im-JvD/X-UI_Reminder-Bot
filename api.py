@@ -1,83 +1,48 @@
-import os, time, requests
-from dotenv import load_dotenv
-from pathlib import Path
-
-load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
-
-PANEL_BASE = os.getenv("PANEL_BASE", "").rstrip("/")
-WEBBASEPATH = os.getenv("WEBBASEPATH", "").strip("/")
-if WEBBASEPATH and not WEBBASEPATH.startswith("/"):
-    WEBBASEPATH = "/" + WEBBASEPATH
-
-LOGIN_URL = f"{PANEL_BASE}{WEBBASEPATH}/login"
-INB_LIST = f"{PANEL_BASE}{WEBBASEPATH}/panel/api/inbounds/list"
-ONLINE = f"{PANEL_BASE}{WEBBASEPATH}/panel/api/inbounds/onlines"
-TRAFF_EMAIL = f"{PANEL_BASE}{WEBBASEPATH}/panel/api/inbounds/getClientTraffics/{{email}}"
-
-print(f"DEBUG: PANEL_BASE={PANEL_BASE}, WEBBASEPATH={WEBBASEPATH}, LOGIN_URL={LOGIN_URL}")
+import os, requests
 
 class PanelAPI:
     def __init__(self, username, password):
-        self.u, self.p = username, password
-        self.s = requests.Session()
-        self.last_login = 0
+        self.base = os.getenv("PANEL_BASE")
+        self.path = os.getenv("WEBBASEPATH")
+        self.session = requests.Session()
+        self.login(username, password)
 
-    def _login(self, force=False):
-        if not force and time.time() - self.last_login < 600:
-            return
-        r = self.s.post(LOGIN_URL, json={"username": self.u, "password": self.p}, timeout=20)
-        r.raise_for_status()
-        if len(self.s.cookies) == 0:
-            raise RuntimeError("Login failed (no cookies received).")
-        print(f"DEBUG: Login successful, cookies: {list(self.s.cookies.keys())}")
-        self.last_login = time.time()
-
-    def _safe_json(self, response):
-        """تبدیل خروجی به JSON یا برگردوندن متن خطا"""
-        try:
-            return response.json()
-        except Exception:
-            txt = response.text
-            if len(txt) > 2000:
-                txt = txt[:2000] + "... [truncated]"
-            return {"error": f"❌ Non-JSON response from panel: {txt}"}
-
-    def _extract_obj(self, data):
-        """اگه جواب دیکشنری باشه و کلید obj داشته باشه، همونو برمی‌گردونیم"""
-        if isinstance(data, dict):
-            if "obj" in data:
-                return data["obj"]
-            # اگه خطا برگشته باشه
-            if "error" in data:
-                return data
-        return data
+    def login(self, username, password):
+        url = f"{self.base}{self.path}/login"
+        r = self.session.post(url, json={"username": username, "password": password}, verify=False)
+        if r.status_code != 200:
+            raise Exception(f"Login failed: {r.text}")
 
     def inbounds(self):
-        self._login()
-        r = self.s.get(INB_LIST, timeout=20)
-        if r.status_code == 401:
-            self._login(force=True)
-            r = self.s.get(INB_LIST, timeout=20)
-        r.raise_for_status()
-        data = self._safe_json(r)
-        return self._extract_obj(data)
+        url = f"{self.base}{self.path}/panel/api/inbounds/list"
+        r = self.session.get(url, verify=False)
+        return r.json().get("obj", [])
 
     def online_clients(self):
-        self._login()
-        r = self.s.post(ONLINE, timeout=20)
-        if r.status_code == 401:
-            self._login(force=True)
-            r = self.s.post(ONLINE, timeout=20)
-        r.raise_for_status()
-        data = self._safe_json(r)
-        return self._extract_obj(data)
+        url = f"{self.base}{self.path}/panel/api/inbounds/onlines"
+        r = self.session.get(url, verify=False)
+        return r.json().get("obj", [])
 
-    def client_traffics_by_email(self, email):
-        self._login()
-        r = self.s.get(TRAFF_EMAIL.format(email=email), timeout=20)
-        if r.status_code == 401:
-            self._login(force=True)
-            r = self.s.get(TRAFF_EMAIL.format(email=email), timeout=20)
-        r.raise_for_status()
-        data = self._safe_json(r)
-        return self._extract_obj(data)
+    # --- متد جدید برای گرفتن مصرف کاربران ---
+    def client_traffics(self, inbound_id: int):
+        """
+        گرفتن ترافیک مصرفی کاربران یک اینباند
+        :param inbound_id: شناسه اینباند
+        :return: dict {email: {"up": int, "down": int}}
+        """
+        url = f"{self.base}{self.path}/panel/api/inbounds/getClientTraffics/{inbound_id}"
+        r = self.session.get(url, verify=False)
+        if r.status_code != 200:
+            return {}
+        try:
+            data = r.json().get("obj", [])
+            traffics = {}
+            for c in data:
+                email = c.get("email", "unknown")
+                traffics[email] = {
+                    "up": int(c.get("up", 0)),
+                    "down": int(c.get("down", 0))
+                }
+            return traffics
+        except Exception:
+            return {}
