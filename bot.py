@@ -249,7 +249,7 @@ async def send_full_reports():
                 log_error(e)
 
 async def check_changes():
-    """Check inbound status every 30m and send only changes (resellers + superadmins)."""
+    """Check inbound status every 1m and send only changes (resellers + superadmins)."""
     # resellers
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
@@ -303,7 +303,7 @@ async def main():
     await test_token()
     await ensure_db()
     scheduler.add_job(send_full_reports, "interval", hours=24)
-    scheduler.add_job(check_changes, "interval", minutes=30)
+    scheduler.add_job(check_changes, "interval", minutes=1)
     scheduler.start()
     await dp.start_polling(bot)
 
