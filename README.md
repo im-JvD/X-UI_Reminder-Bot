@@ -16,7 +16,7 @@
 sudo bash -c "$(curl -sL https://raw.githubusercontent.com/im-JvD/X-UI_Reminder-Bot/refs/heads/main/installer.sh)"
 ```
 ‌
-1. **نصب و راه‌اندازی پروژه**
+1. **نصب و راه‌اندازی ` BOT ` **
 - توکن دریافتی از **بات‌فادر**
 - آی‌دی کانال **عضویت اجباری**
 - آی‌دی عددی اکانت تلگرام **سوپر ادمین**
@@ -24,9 +24,9 @@ sudo bash -c "$(curl -sL https://raw.githubusercontent.com/im-JvD/X-UI_Reminder-
 - **UserName** پنل 
 - **Password** پنل
 
-2. **راه‌اندازی مجدد ربات**
-3. **بروزرسانی بات**
-4. **حذف کامل بات**
+2. **راه‌اندازی مجدد ` BOT `**
+3. **بروزرسانی ` BOT `**
+4. **حذف کامل ` BOT `**
 5. **دریافت 100 خط آخر** ` LOG `
 6. **مشاهده ` LOG ` بصورت زنده**
 
