@@ -79,6 +79,7 @@ install_bot() {
 
   PANEL_BASE=$(echo $FULL_URL | sed -E 's#(https?://[^/]+).*#\1#')
   WEBBASEPATH=$(echo $FULL_URL | sed -E 's#https?://[^/]+(/.*)?#\1#')
+  [ "$WEBBASEPATH" = "/" ] && WEBBASEPATH=""
 
   echo -e "${GREEN}✅ Detected PANEL_BASE=$PANEL_BASE${NC}"
   echo -e "${GREEN}✅ Detected WEBBASEPATH=${WEBBASEPATH:-'(none)'}${NC}"
@@ -135,7 +136,10 @@ update_bot() {
   pip install -r requirements.txt
 
   ensure_service
+  sudo systemctl enable reseller-report-bot
+  sudo systemctl daemon-reload
   sudo systemctl restart reseller-report-bot
+
   echo -e "${GREEN}✅ Update completed and service restarted.${NC}"
   pause
 }
