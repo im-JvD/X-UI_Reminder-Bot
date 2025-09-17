@@ -2,7 +2,7 @@
 import os, asyncio, aiosqlite, time, traceback, json
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.client.default import DefaultBotProperties
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
@@ -30,7 +30,6 @@ scheduler = AsyncIOScheduler()
 MAIN_KB = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🆘 Support / Request Reseller")],
-        [KeyboardButton(text="📊 My Inbounds Report")],
     ],
     resize_keyboard=True
 )
@@ -62,24 +61,56 @@ async def test_token():
         me = await bot.get_me()
         print(f"DEBUG: Bot connected as @{me.username}")
     except Exception as e:
-        print(f"ERROR: Cannot connect to Telegram API - check BOT_TOKEN: {e}")
+        log_error(e)
         raise
 
-# --- HELPERS ---
-def safe_text(text: str, limit: int = 4000) -> str:
-    text = text.replace("<", "&lt;").replace(">", "&gt;")
-    if len(text) > limit:
-        return text[:limit] + "\n... [truncated]"
-    return text
-
+# --- UTILS ---
 def hb(n):
-    for u in ["B", "KB", "MB", "GB", "TB"]:
-        if n < 1024:
-            return f"{n:.0f} {u}"
-        n /= 1024
-    return f"{n:.1f} PB"
+    try:
+        n = int(n)
+    except Exception:
+        return "0B"
+    units = ["B", "KB", "MB", "GB", "TB"]
+    i = 0
+    while n >= 1024 and i < len(units) - 1:
+        n //= 1024
+        i += 1
+    return f"{n}{units[i]}"
 
-# --- REPORT BUILDER ---
+def safe_text(s: str) -> str:
+    return (s.replace("&", "&amp;")
+             .replace("<", "&lt;")
+             .replace(">", "&gt;"))
+
+# --- ROLES ---
+async def is_superadmin(tg_id: int) -> bool:
+    return tg_id in SUPERADMINS
+
+async def ensure_user(tg_id: int):
+    async with aiosqlite.connect("data.db") as db:
+        await db.execute("INSERT OR IGNORE INTO users(telegram_id, role) VALUES (?, 'user')", (tg_id,))
+        await db.commit()
+
+# --- COMMANDS ---
+@dp.message(Command("start"))
+async def start(m: Message):
+    try:
+        member = await bot.get_chat_member(REQUIRED_CHANNEL_ID, m.from_user.id)
+        if member.status not in ("member", "administrator", "creator"):
+            await m.answer(f"Please join {REQUIRED_CHANNEL_ID} first and then send /start again.")
+            return
+    except Exception:
+        await m.answer("❌ Cannot verify channel membership right now. Try again later.")
+        return
+
+    await ensure_user(m.from_user.id)
+    await m.answer("Welcome to 3X-UI Report Bot 👋", reply_markup=MAIN_KB)
+
+@dp.message(F.text == "🆘 Support / Request Reseller")
+async def support_req(m: Message):
+    await m.answer("برای درخواست نمایندگی یا پشتیبانی، به ادمین پیام بدید: @your_admin")
+
+# --- ANALYSIS ---
 def analyze_inbound(ib, online_emails):
     stats = {"users": 0, "up": 0, "down": 0, "online": 0, "expiring": [], "expired": []}
     if not isinstance(ib, dict):
@@ -139,7 +170,8 @@ async def build_report(inbound_ids):
             expired.extend(s["expired"])
 
         report = (f"📊 Report:\n"
-                  f"👥 Users: {total_users}\n"f"🟢 Online: {online_count}\n"
+                  f"👥 Users: {total_users}\n"
+                  f"🟢 Online: {online_count}\n"
                   f"⏳ Expiring (&lt;24h): {len(expiring)}\n"
                   f"🚫 Expired: {len(expired)}")
         return safe_text(report), {"expiring": expiring, "expired": expired, "up": total_up, "down": total_down}
@@ -147,70 +179,57 @@ async def build_report(inbound_ids):
         log_error(e)
         return "❌ Error while generating report. Check log.txt", {"expiring": [], "expired": [], "up": 0, "down": 0}
 
-# --- HANDLERS ---
-@dp.message(Command("start"))
-async def start(m: Message):
-    try:
-        member = await bot.get_chat_member(REQUIRED_CHANNEL_ID, m.from_user.id)
-        if member.status not in ("member", "administrator", "creator"):
-            await m.answer(f"Please join {REQUIRED_CHANNEL_ID} first and then send /start again.")
-            return
-    except Exception:
-        await m.answer("❌ Cannot verify channel membership right now. Try again later.")
-        return
-
-    async with aiosqlite.connect("data.db") as db:
-        await db.execute("INSERT OR IGNORE INTO users(telegram_id, role) VALUES (?, 'user')", (m.from_user.id,))
-        await db.commit()
-    await m.answer("Welcome to 3X-UI Report Bot 👋", reply_markup=MAIN_KB)
-
-@dp.message(Command("assign"))
-async def assign_inbound(m: Message):
-    if m.from_user.id not in SUPERADMINS:
-        await m.answer("⛔️ Access denied.")
-        return
-    parts = m.text.split()
-    if len(parts) != 3:
-        await m.answer("Usage: /assign <telegram_id> <inbound_id>")
-        return
-    tg_id, inbound_id = int(parts[1]), int(parts[2])
-    async with aiosqlite.connect("data.db") as db:
-        await db.execute("INSERT OR IGNORE INTO users (telegram_id, role) VALUES (?, 'reseller')", (tg_id,))
-        await db.execute("INSERT OR REPLACE INTO reseller_inbounds (telegram_id, inbound_id) VALUES (?, ?)", (tg_id, inbound_id))
-        await db.commit()
-    await m.answer(f"✅ Assigned inbound {inbound_id} to user {tg_id}")
-    try:
-        await bot.send_message(tg_id, f"🔑 You have been assigned to inbound {inbound_id}.")
-    except Exception:
-        pass
-
-@dp.message(Command("report_all"))
-async def report_all(m: Message):
-    if m.from_user.id not in SUPERADMINS:
-        await m.answer("⛔️ Access denied.")
-        return
-    data = api.inbounds()
-    if not isinstance(data, list):
-        await m.answer(safe_text(f"❌ Unexpected response from panel:\n{data}"))
-        return
-    all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
-    report, _ = await build_report(all_ids)
-    await m.answer("📢 Full Panel Report:\n" + safe_text(report))
-
-@dp.message(F.text == "📊 My Inbounds Report")
-async def my_report(m: Message):
+# --- /report COMMAND ---
+@dp.message(Command("report"))
+async def report_cmd(m: Message):
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (m.from_user.id,))
-    if not rows:
-        await m.answer("No inbound assigned to you.")
+    if not rows and m.from_user.id not in SUPERADMINS:
+        await m.answer("❌ هیچ اینباندی به شما اختصاص داده نشده.")
         return
-    report, _ = await build_report([r[0] for r in rows])
-    await m.answer(safe_text(report))
 
-# --- JOBS ---
+    if m.from_user.id in SUPERADMINS:
+        data = api.inbounds()
+        all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
+        report, _ = await build_report(all_ids)
+    else:
+        inbound_ids = [r[0] for r in rows]
+        report, _ = await build_report(inbound_ids)
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_report")]
+        ]
+    )
+    await m.answer(report, reply_markup=kb)
+
+@dp.callback_query(F.data == "refresh_report")
+async def refresh_report(query):
+    user_id = query.from_user.id
+    async with aiosqlite.connect("data.db") as db:
+        rows = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (user_id,))
+    if not rows and user_id not in SUPERADMINS:
+        await query.message.edit_text("❌ هیچ اینباندی به شما اختصاص داده نشده.")
+        return
+
+    if user_id in SUPERADMINS:
+        data = api.inbounds()
+        all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
+        report, _ = await build_report(all_ids)
+    else:
+        inbound_ids = [r[0] for r in rows]
+        report, _ = await build_report(inbound_ids)
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_report")]
+        ]
+    )
+    await query.message.edit_text(report, reply_markup=kb)
+    await query.answer("✅ گزارش بروزرسانی شد", show_alert=False)
+
+# --- JOBS (send_full_reports, check_changes) ---
 async def send_full_reports():
-    """Send full report every 24h to each reseller + superadmins."""
-    # Resellers
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     for (tg,) in rows:
@@ -219,22 +238,21 @@ async def send_full_reports():
         inbound_ids = [r[0] for r in ibs]
         report, details = await build_report(inbound_ids)
         try:
-            await bot.send_message(tg, "📢 Daily Full Report:\n" + safe_text(report))
-            async with aiosqlite.connect("data.db") as db:
-                await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)",
-                                 (tg, json.dumps(details), int(time.time())))
-                await db.commit()
+            await bot.send_message(tg, "📢 Daily Full Report:\n" + report)
         except Exception as e:
             log_error(e)
+        async with aiosqlite.connect("data.db") as db:
+            await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)",
+                             (tg, json.dumps(details), int(time.time())))
+            await db.commit()
 
-    # Superadmins: full panel
     data = api.inbounds()
     if isinstance(data, list):
         all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
         report, details = await build_report(all_ids)
         for tg in SUPERADMINS:
             try:
-                await bot.send_message(tg, "📢 Daily Full Panel Report:\n" + safe_text(report))
+                await bot.send_message(tg, "📢 Daily Full Panel Report:\n" + report)
                 async with aiosqlite.connect("data.db") as db:
                     await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)",
                                      (tg, json.dumps(details), int(time.time())))
@@ -243,8 +261,6 @@ async def send_full_reports():
                 log_error(e)
 
 async def check_changes():
-    """Check inbound status every 1m and send only changes (resellers + superadmins)."""
-    # Resellers
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     for (tg,) in rows:
@@ -262,11 +278,9 @@ async def check_changes():
         new_expired = [u for u in details["expired"] if u not in last["expired"]]
 
         if new_expiring or new_expired:
-            msg = ""
-
-            msg += "📢 Changes detected:\n"
+            msg = "📢 Changes detected:\n"
             if new_expiring:
-                msg += "⏳ Newly Expiring (&lt;24h or &lt;1GB):\n" + "\n".join(new_expiring) + "\n"
+                msg += "⏳ Newly Expiring (&lt;24h):\n" + "\n".join(new_expiring) + "\n"
             if new_expired:
                 msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
             try:
@@ -279,7 +293,6 @@ async def check_changes():
                              (tg, json.dumps(details), int(time.time())))
             await db.commit()
 
-    # Superadmins (diff)
     data = api.inbounds()
     if isinstance(data, list):
         all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
@@ -294,8 +307,7 @@ async def check_changes():
             new_expired = [u for u in details["expired"] if u not in last["expired"]]
 
             if new_expiring or new_expired:
-                msg = ""
-                msg += "📢 SuperAdmin - Panel Changes:\n"
+                msg = "📢 SuperAdmin - Panel Changes:\n"
                 if new_expiring:
                     msg += "⏳ Newly Expiring:\n" + "\n".join(new_expiring) + "\n"
                 if new_expired:
@@ -315,7 +327,7 @@ async def main():
     await test_token()
     await ensure_db()
     scheduler.add_job(send_full_reports, "interval", hours=24)
-    scheduler.add_job(check_changes, "interval", minutes=1)  # تست روی 1 دقیقه
+    scheduler.add_job(check_changes, "interval", minutes=1)
     scheduler.start()
     await dp.start_polling(bot)
 
