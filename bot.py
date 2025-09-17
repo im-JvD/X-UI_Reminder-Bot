@@ -1,4 +1,4 @@
-# Version: 1.3.3 - Stable
+# Version: 1.3.4 - Stable
 import os, asyncio, aiosqlite, time, traceback, json
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -37,45 +37,26 @@ MAIN_KB = ReplyKeyboardMarkup(
 )
 
 # --- STATE ---
-pending_assign = {}  # {admin_id: target_user_id}
+pending_assign = {}
 
 # --- UTIL: Gregorian → Jalali ---
 def gregorian_to_jalali(g_y, g_m, g_d):
     g_days_in_month = [31,28,31,30,31,30,31,31,30,31,30,31]
     j_days_in_month = [31,31,31,31,31,31,30,30,30,30,30,29]
-
-    gy = g_y-1600
-    gm = g_m-1
-    gd = g_d-1
-
+    gy = g_y-1600; gm = g_m-1; gd = g_d-1
     g_day_no = 365*gy + (gy+3)//4 - (gy+99)//100 + (gy+399)//400
-    for i in range(gm):
-        g_day_no += g_days_in_month[i]
-    if gm>1 and ((gy%4==0 and gy%100!=0) or (gy%400==0)):
-        g_day_no +=1
+    for i in range(gm): g_day_no += g_days_in_month[i]
+    if gm>1 and ((gy%4==0 and gy%100!=0) or (gy%400==0)): g_day_no +=1
     g_day_no += gd
-
     j_day_no = g_day_no-79
-    j_np = j_day_no//12053
-    j_day_no %= 12053
-
-    jy = 979+33*j_np+4*(j_day_no//1461)
-    j_day_no %= 1461
-
-    if j_day_no >= 366:
-        jy += (j_day_no-1)//365
-        j_day_no = (j_day_no-1)%365
-
+    j_np = j_day_no//12053; j_day_no %= 12053
+    jy = 979+33*j_np+4*(j_day_no//1461); j_day_no %= 1461
+    if j_day_no >= 366: jy += (j_day_no-1)//365; j_day_no = (j_day_no-1)%365
     for i in range(11):
         if j_day_no < j_days_in_month[i]:
-            jm = i+1
-            jd = j_day_no+1
-            break
+            jm = i+1; jd = j_day_no+1; break
         j_day_no -= j_days_in_month[i]
-    else:
-        jm = 12
-        jd = j_day_no+1
-
+    else: jm = 12; jd = j_day_no+1
     return jy, jm, jd
 
 def now_shamsi_str():
@@ -127,37 +108,38 @@ async def ensure_user(tg_id: int) -> bool:
 # --- COMMANDS ---
 @dp.message(Command("start"))
 async def start(m: Message):
+    # بررسی عضویت کانال
     try:
         member = await bot.get_chat_member(REQUIRED_CHANNEL_ID, m.from_user.id)
-        if member.status not in ("member", "administrator", "creator"):
-            await m.answer(f"Please join {REQUIRED_CHANNEL_ID} first and then send /start again.")
-            return
+        is_member = member.status in ("member", "administrator", "creator")
     except Exception:
-        await m.answer("❌ Cannot verify channel membership right now. Try again later.")
-        return
+        is_member = False
+    if not is_member:
+        await m.answer(f"برای استفاده از ربات ابتدا باید عضو کانال {REQUIRED_CHANNEL_ID} شوید.")
 
+    # ثبت یا بررسی کاربر در DB
     is_new = await ensure_user(m.from_user.id)
+
+    # پیام خوشامد
     await m.answer("👋 به ربات 3X-UI خوش آمدید!", reply_markup=MAIN_KB)
 
+    # فقط اگر کاربر جدید بود → به سوپرادمین اطلاع بده
     if is_new:
         user = m.from_user
         fullname = (user.first_name or "") + (" " + user.last_name if user.last_name else "")
         username = f"@{user.username}" if user.username else "ندارد"
         uid = user.id
         date_str = now_shamsi_str()
-
         text = (f"یک کاربر جدید با مشخصات زیر ربات را استارت کرد ...\n\n"
                 f"نام اکانت تلگرام : {fullname}\n"
                 f"نام کاربری کاربر : {username}\n"
                 f"آی‌دی عددی کاربر : {uid}\n"
                 f"تاریخ عضویت در ربات : {date_str}")
-
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="➕ اختصاص اینباند", callback_data=f"assign_inbound:{uid}")]
             ]
         )
-
         for admin_id in SUPERADMINS:
             try:
                 await bot.send_message(admin_id, text, reply_markup=kb)
@@ -200,27 +182,20 @@ async def process_inbound_id(m: Message):
 # --- REPORTS ---
 def analyze_inbound(ib, online_emails):
     stats = {"users": 0, "up": 0, "down": 0, "online": 0, "expiring": [], "expired": []}
-    if not isinstance(ib, dict):
-        return stats
+    if not isinstance(ib, dict): return stats
     settings = ib.get("settings")
     if isinstance(settings, str):
-        try:
-            settings = json.loads(settings)
-        except Exception:
-            settings = {}
-    if not isinstance(settings, dict):
-        settings = {}
+        try: settings = json.loads(settings)
+        except Exception: settings = {}
+    if not isinstance(settings, dict): settings = {}
     clients = settings.get("clients", ib.get("clients", []))
     for c in clients:
         stats["users"] += 1
         up, down = int(c.get("up", 0)), int(c.get("down", 0))
-        stats["up"] += up
-        stats["down"] += down
-        if c.get("email") in online_emails:
-            stats["online"] += 1
+        stats["up"] += up; stats["down"] += down
+        if c.get("email") in online_emails: stats["online"] += 1
         quota = int(c.get("total", 0) or c.get("totalGB", 0))
-        used = up + down
-        left = quota - used if quota > 0 else None
+        used = up + down; left = quota - used if quota > 0 else None
         exp = int(c.get("expiryTime", 0) or c.get("expire", 0))
         rem = (exp / 1000) - time.time() if exp > 0 else None
         if (rem is not None and rem <= 0) or (left is not None and left <= 0):
@@ -238,15 +213,10 @@ async def build_report(inbound_ids):
         total_users = total_up = total_down = online_count = 0
         expiring, expired = [], []
         for ib in data:
-            if not isinstance(ib, dict) or ib.get("id") not in inbound_ids:
-                continue
+            if not isinstance(ib, dict) or ib.get("id") not in inbound_ids: continue
             s = analyze_inbound(ib, online_emails)
-            total_users += s["users"]
-            total_up += s["up"]
-            total_down += s["down"]
-            online_count += s["online"]
-            expiring.extend(s["expiring"])
-            expired.extend(s["expired"])
+            total_users += s["users"]; total_up += s["up"]; total_down += s["down"]
+            online_count += s["online"]; expiring.extend(s["expiring"]); expired.extend(s["expired"])
         report = (f"📊 Report:\n"
                   f"👥 Users: {total_users}\n"
                   f"🟢 Online: {online_count}\n"
@@ -258,30 +228,21 @@ async def build_report(inbound_ids):
         return "❌ Error while generating report. Check log.txt", {"expiring": [], "expired": [], "up": 0, "down": 0}
 
 def safe_text(s: str) -> str:
-    return (s.replace("&", "&amp;")
-             .replace("<", "&lt;")
-             .replace(">", "&gt;"))
+    return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 @dp.message(Command("report"))
 async def report_cmd(m: Message):
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (m.from_user.id,))
     if not rows and m.from_user.id not in SUPERADMINS:
-        await m.answer("❌ هیچ اینباندی به شما اختصاص داده نشده.")
-        return
+        await m.answer("❌ هیچ اینباندی به شما اختصاص داده نشده."); return
     if m.from_user.id in SUPERADMINS:
-        data = api.inbounds()
-        all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
+        data = api.inbounds(); all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
         report, _ = await build_report(all_ids)
     else:
-        inbound_ids = [r[0] for r in rows]
-        report, _ = await build_report(inbound_ids)
+        inbound_ids = [r[0] for r in rows]; report, _ = await build_report(inbound_ids)
     report += f"\n\n{now_shamsi_str()}"
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_report")]
-        ]
-    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_report")]])
     await m.answer(report, reply_markup=kb)
 
 @dp.callback_query(F.data == "refresh_report")
@@ -290,21 +251,14 @@ async def refresh_report(query):
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (user_id,))
     if not rows and user_id not in SUPERADMINS:
-        await query.message.edit_text("❌ هیچ اینباندی به شما اختصاص داده نشده.")
-        return
+        await query.message.edit_text("❌ هیچ اینباندی به شما اختصاص داده نشده."); return
     if user_id in SUPERADMINS:
-        data = api.inbounds()
-        all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
+        data = api.inbounds(); all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
         report, _ = await build_report(all_ids)
     else:
-        inbound_ids = [r[0] for r in rows]
-        report, _ = await build_report(inbound_ids)
+        inbound_ids = [r[0] for r in rows]; report, _ = await build_report(inbound_ids)
     report += f"\n\n{now_shamsi_str()}"
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_report")]
-        ]
-    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_report")]])
     await query.message.edit_text(report, reply_markup=kb)
     await query.answer("✅ گزارش بروزرسانی شد", show_alert=False)
 
@@ -315,31 +269,23 @@ async def send_full_reports():
     for (tg,) in rows:
         async with aiosqlite.connect("data.db") as db:
             ibs = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (tg,))
-        inbound_ids = [r[0] for r in ibs]
-        report, details = await build_report(inbound_ids)
+        inbound_ids = [r[0] for r in ibs]; report, details = await build_report(inbound_ids)
         report += f"\n\n{now_shamsi_str()}"
-        try:
-            await bot.send_message(tg, "📢 Daily Full Report:\n" + report)
-        except Exception as e:
-            log_error(e)
+        try: await bot.send_message(tg, "📢 Daily Full Report:\n" + report)
+        except Exception as e: log_error(e)
         async with aiosqlite.connect("data.db") as db:
-            await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)",
-                             (tg, json.dumps(details), int(time.time())))
+            await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)", (tg, json.dumps(details), int(time.time())))
             await db.commit()
     data = api.inbounds()
     if isinstance(data, list):
-        all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
-        report, details = await build_report(all_ids)
+        all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]; report, details = await build_report(all_ids)
         report += f"\n\n{now_shamsi_str()}"
         for tg in SUPERADMINS:
-            try:
-                await bot.send_message(tg, "📢 Daily Full Panel Report:\n" + report)
-                async with aiosqlite.connect("data.db") as db:
-                    await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)",
-                                     (tg, json.dumps(details), int(time.time())))
-                    await db.commit()
-            except Exception as e:
-                log_error(e)
+            try: await bot.send_message(tg, "📢 Daily Full Panel Report:\n" + report)
+            except Exception as e: log_error(e)
+            async with aiosqlite.connect("data.db") as db:
+                await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)", (tg, json.dumps(details), int(time.time())))
+                await db.commit()
 
 async def check_changes():
     async with aiosqlite.connect("data.db") as db:
@@ -347,61 +293,43 @@ async def check_changes():
     for (tg,) in rows:
         async with aiosqlite.connect("data.db") as db:
             ibs = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (tg,))
-        inbound_ids = [r[0] for r in ibs]
-        _, details = await build_report(inbound_ids)
+        inbound_ids = [r[0] for r in ibs]; _, details = await build_report(inbound_ids)
         async with aiosqlite.connect("data.db") as db:
-            cursor = await db.execute("SELECT last_json FROM last_reports WHERE telegram_id=?", (tg,))
-            row = await cursor.fetchone()
+            cursor = await db.execute("SELECT last_json FROM last_reports WHERE telegram_id=?", (tg,)); row = await cursor.fetchone()
             last = json.loads(row[0]) if row and row[0] else {"expiring": [], "expired": [], "up": 0, "down": 0}
-        new_expiring = [u for u in details["expiring"] if u not in last["expiring"]]
-        new_expired = [u for u in details["expired"] if u not in last["expired"]]
+        new_expiring = [u for u in details["expiring"] if u not in last["expiring"]]; new_expired = [u for u in details["expired"] if u not in last["expired"]]
         if new_expiring or new_expired:
             msg = "📢 Changes detected:\n"
-            if new_expiring:
-                msg += "⏳ Newly Expiring (<24h):\n" + "\n".join(new_expiring) + "\n"
-            if new_expired:
-                msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
-            try:
-                await bot.send_message(tg, safe_text(msg))
-            except Exception as e:
-                log_error(e)
+            if new_expiring: msg += "⏳ Newly Expiring (<24h):\n" + "\n".join(new_expiring) + "\n"
+            if new_expired: msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
+            try: await bot.send_message(tg, safe_text(msg))
+            except Exception as e: log_error(e)
         async with aiosqlite.connect("data.db") as db:
-            await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)",
-                             (tg, json.dumps(details), int(time.time())))
+            await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)", (tg, json.dumps(details), int(time.time())))
             await db.commit()
     data = api.inbounds()
     if isinstance(data, list):
-        all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
-        _, details = await build_report(all_ids)
+        all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]; _, details = await build_report(all_ids)
         for tg in SUPERADMINS:
             async with aiosqlite.connect("data.db") as db:
-                cursor = await db.execute("SELECT last_json FROM last_reports WHERE telegram_id=?", (tg,))
-                row = await cursor.fetchone()
+                cursor = await db.execute("SELECT last_json FROM last_reports WHERE telegram_id=?", (tg,)); row = await cursor.fetchone()
                 last = json.loads(row[0]) if row and row[0] else {"expiring": [], "expired": [], "up": 0, "down": 0}
-            new_expiring = [u for u in details["expiring"] if u not in last["expiring"]]
-            new_expired = [u for u in details["expired"] if u not in last["expired"]]
+            new_expiring = [u for u in details["expiring"] if u not in last["expiring"]]; new_expired = [u for u in details["expired"] if u not in last["expired"]]
             if new_expiring or new_expired:
                 msg = "📢 SuperAdmin - Panel Changes:\n"
-                if new_expiring:
-                    msg += "⏳ Newly Expiring:\n" + "\n".join(new_expiring) + "\n"
-                if new_expired:
-                    msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
-                try:
-                    await bot.send_message(tg, safe_text(msg))
-                except Exception as e:
-                    log_error(e)
+                if new_expiring: msg += "⏳ Newly Expiring:\n" + "\n".join(new_expiring) + "\n"
+                if new_expired: msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
+                try: await bot.send_message(tg, safe_text(msg))
+                except Exception as e: log_error(e)
             async with aiosqlite.connect("data.db") as db:
-                await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)",
-                                 (tg, json.dumps(details), int(time.time())))
+                await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)", (tg, json.dumps(details), int(time.time())))
                 await db.commit()
 
 # --- MAIN ---
 async def main():
-    await test_token()
-    await ensure_db()
+    await test_token(); await ensure_db()
     scheduler.add_job(send_full_reports, "cron", hour=0, minute=0, timezone="Asia/Tehran")
-    scheduler.add_job(check_changes, "interval", minutes=1)
-    scheduler.start()
+    scheduler.add_job(check_changes, "interval", minutes=1); scheduler.start()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
