@@ -21,6 +21,7 @@ show_menu() {
   echo -e "${BLUE}========================================${NC}"
   echo -e "${GREEN}  X-UI Reseller Reminder Bot Manager   ${NC}"
   echo -e "${BLUE}========================================${NC}"
+  echo -e ""
   echo -e "${GREEN}1)${NC} Install Bot"
   echo -e "${GREEN}2)${NC} Start/Restart Bot"
   echo -e "${GREEN}3)${NC} Update Bot (keep .env & DB)"
@@ -28,6 +29,7 @@ show_menu() {
   echo -e "${BLUE}5) Show Last 100 Log Lines${NC}"
   echo -e "${BLUE}6) Show Live Logs${NC}"
   echo -e "${YELLOW}0) Exit${NC}"
+  echo -e ""
   echo -e "${BLUE}========================================${NC}"
 }
 
