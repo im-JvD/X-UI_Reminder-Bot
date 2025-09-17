@@ -236,12 +236,12 @@ async def build_report(inbound_ids: list[int]):
             online_count += s["online"]
             expiring.extend(s["expiring"])
             expired.extend(s["expired"])
-        report = (f"📊 <b>گزارش مربوط به اینباند شما :<b>\n"
+        report = (f"📊 <b>گزارش مربوط به اینباند شما :</b>\n"
                   f"\n"
-                  f"👥 <b>تعداد کاربران <b>: {total_users}\n"
-                  f"🟢 <b>کاربران آنلاین <b>: {online_count}\n"
-                  f"⏳ <b>کاربرانی که بزودی منقضی خواهند شد <b>: {len(expiring)}\n"
-                  f"🚫 <b>کاربران منقضی شده <b>: {len(expired)}")
+                  f"👥 <b>تعداد کاربران </b>: [ {total_users} ]\n"
+                  f"🟢 <b>کاربران آنلاین </b>: [ {online_count} ]\n"
+                  f"⏳ <b>کاربرانی که بزودی منقضی خواهند شد </b>: [ {len(expiring)} ]\n"
+                  f"🚫 <b>کاربران منقضی شده </b>: [ {len(expired)} ]")
         return safe_text(report), {"expiring": expiring, "expired": expired, "up": total_up, "down": total_down}
     except Exception as e:
         log_error(e)
