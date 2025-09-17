@@ -34,6 +34,6 @@
 کافیه که دستور پایین رو در ترمینال اجرا کنید تا **به‌صورت خودکار نصب و راه‌اندازی شود** :
 
 ```
-<code>bash
-sudo bash -c "$(curl -sL https://raw.githubusercontent.com/im-JvD/X-UI_Reminder-Bot/refs/heads/main/installer.sh)"</code>
+bash
+sudo bash -c "$(curl -sL https://raw.githubusercontent.com/im-JvD/X-UI_Reminder-Bot/refs/heads/main/installer.sh)"
 ```
