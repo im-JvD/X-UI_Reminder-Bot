@@ -20,7 +20,7 @@ show_menu() {
   clear
   echo -e "${BLUE}========================================${NC}"
   echo -e "${GREEN}  X-UI Reseller Reminder Bot Manager   ${NC}"
-  echo -e "${YELLOW}  BOT Version [${GREEN} v1.3.9 ]   ${NC}"
+  echo -e "${YELLOW}    BOT Version [${GREEN} v1.3.9 ${NC}]   "
   echo -e "${BLUE}========================================${NC}"
   echo -e ""
   echo -e "${GREEN}1)${NC} Install Bot"
