@@ -13,36 +13,60 @@ LOGIN_URL = f"{PANEL_BASE}{WEBBASEPATH}/login"
 INB_LIST = f"{PANEL_BASE}{WEBBASEPATH}/panel/api/inbounds/list"
 ONLINE = f"{PANEL_BASE}{WEBBASEPATH}/panel/api/inbounds/onlines"
 
+print(f"DEBUG: PANEL_BASE={PANEL_BASE}, WEBBASEPATH={WEBBASEPATH}, LOGIN_URL={LOGIN_URL}")
+
 class PanelAPI:
-    def __init__(self):
-        self.session = requests.Session()
-        self.token = None
+    def __init__(self, username, password):
+        self.u, self.p = username, password
+        self.s = requests.Session()
+        self.last_login = 0
 
-    def login(self, username, password):
-        try:
-            r = self.session.post(LOGIN_URL, data={"username": username, "password": password})
-            if r.status_code == 200 and "access_token" in r.json():
-                self.token = r.json()["access_token"]
-                self.session.headers.update({"Authorization": f"Bearer {self.token}"})
-                return True
-        except Exception as e:
-            print("Login error:", e)
-        return False
+    def _login(self, force=False):
+        if not force and time.time() - self.last_login < 600:
+            return
+        r = self.s.post(LOGIN_URL, json={"username": self.u, "password": self.p}, timeout=20)
+        r.raise_for_status()
+        if len(self.s.cookies) == 0:
+            raise RuntimeError("Login failed (no cookies received).")
+        print(f"DEBUG: Login successful, cookies: {list(self.s.cookies.keys())}")
+        self.last_login = time.time()
 
-    def get_inbounds(self):
+    def _safe_json(self, response):
+        """تبدیل خروجی به JSON یا برگردوندن متن خطا"""
         try:
-            r = self.session.get(INB_LIST)
-            if r.status_code == 200:
-                return r.json()
-        except Exception as e:
-            print("Inbound error:", e)
-        return []
+            return response.json()
+        except Exception:
+            txt = response.text
+            if len(txt) > 2000:
+                txt = txt[:2000] + "... [truncated]"
+            return {"error": f"❌ Non-JSON response from panel: {txt}"}
 
-    def get_online_users(self):
-        try:
-            r = self.session.get(ONLINE)
-            if r.status_code == 200:
-                return r.json()
-        except Exception as e:
-            print("Online users error:", e)
-        return []
+    def _extract_obj(self, data):
+        """اگه جواب دیکشنری باشه و کلید obj داشته باشه، همونو برمی‌گردونیم"""
+        if isinstance(data, dict):
+            if "obj" in data:
+                return data["obj"]
+            # اگه خطا برگشته باشه
+            if "error" in data:
+                return data
+        return data
+
+    def inbounds(self):
+        self._login()
+        r = self.s.get(INB_LIST, timeout=20)
+        if r.status_code == 401:
+            self._login(force=True)
+            r = self.s.get(INB_LIST, timeout=20)
+        r.raise_for_status()
+        data = self._safe_json(r)
+        return self._extract_obj(data)
+
+    def online_clients(self):
+        self._login()
+        r = self.s.post(ONLINE, timeout=20)
+        if r.status_code == 401:
+            self._login(force=True)
+            r = self.s.post(ONLINE, timeout=20)
+        r.raise_for_status()
+        data = self._safe_json(r)
+        return self._extract_obj(data)
