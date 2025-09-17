@@ -1,6 +1,6 @@
 # Version: 1.0.0 - Stable
 import os, asyncio, aiosqlite, time, traceback, json
-import jdatetime
+from datetime import datetime
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
@@ -34,6 +34,50 @@ MAIN_KB = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+
+# --- UTIL: Gregorian → Jalali ---
+def gregorian_to_jalali(g_y, g_m, g_d):
+    g_days_in_month = [31,28,31,30,31,30,31,31,30,31,30,31]
+    j_days_in_month = [31,31,31,31,31,31,30,30,30,30,30,29]
+
+    gy = g_y-1600
+    gm = g_m-1
+    gd = g_d-1
+
+    g_day_no = 365*gy + (gy+3)//4 - (gy+99)//100 + (gy+399)//400
+    for i in range(gm):
+        g_day_no += g_days_in_month[i]
+    if gm>1 and ((gy%4==0 and gy%100!=0) or (gy%400==0)):
+        g_day_no +=1
+    g_day_no += gd
+
+    j_day_no = g_day_no-79
+    j_np = j_day_no//12053
+    j_day_no %= 12053
+
+    jy = 979+33*j_np+4*(j_day_no//1461)
+    j_day_no %= 1461
+
+    if j_day_no >= 366:
+        jy += (j_day_no-1)//365
+        j_day_no = (j_day_no-1)%365
+
+    for i in range(11):
+        if j_day_no < j_days_in_month[i]:
+            jm = i+1
+            jd = j_day_no+1
+            break
+        j_day_no -= j_days_in_month[i]
+    else:
+        jm = 12
+        jd = j_day_no+1
+
+    return jy, jm, jd
+
+def now_shamsi_str():
+    now = datetime.now()
+    jy, jm, jd = gregorian_to_jalali(now.year, now.month, now.day)
+    return f"{jy:04d}-{jm:02d}-{jd:02d} {now.strftime('%H:%M:%S')}"
 
 # --- DB ---
 async def ensure_db():
@@ -197,8 +241,7 @@ async def report_cmd(m: Message):
         inbound_ids = [r[0] for r in rows]
         report, _ = await build_report(inbound_ids)
 
-    # افزودن تاریخ شمسی
-    report += f"\n\n⏱ آخرین بروزرسانی: {jdatetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    report += f"\n\n⏱ آخرین بروزرسانی: {now_shamsi_str()}"
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -224,8 +267,7 @@ async def refresh_report(query):
         inbound_ids = [r[0] for r in rows]
         report, _ = await build_report(inbound_ids)
 
-    # افزودن تاریخ شمسی
-    report += f"\n\n⏱ آخرین بروزرسانی: {jdatetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    report += f"\n\n⏱ آخرین بروزرسانی: {now_shamsi_str()}"
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -244,7 +286,7 @@ async def send_full_reports():
             ibs = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (tg,))
         inbound_ids = [r[0] for r in ibs]
         report, details = await build_report(inbound_ids)
-        report += f"\n\n⏱ آخرین بروزرسانی: {jdatetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        report += f"\n\n⏱ آخرین بروزرسانی: {now_shamsi_str()}"
         try:
             await bot.send_message(tg, "📢 Daily Full Report:\n" + report)
         except Exception as e:
@@ -258,7 +300,7 @@ async def send_full_reports():
     if isinstance(data, list):
         all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
         report, details = await build_report(all_ids)
-        report += f"\n\n⏱ آخرین بروزرسانی: {jdatetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        report += f"\n\n⏱ آخرین بروزرسانی: {now_shamsi_str()}"
         for tg in SUPERADMINS:
             try:
                 await bot.send_message(tg, "📢 Daily Full Panel Report:\n" + report)
@@ -292,7 +334,7 @@ async def check_changes():
                 msg += "⏳ Newly Expiring (&lt;24h):\n" + "\n".join(new_expiring) + "\n"
             if new_expired:
                 msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
-            msg += f"\n\n⏱ آخرین بروزرسانی: {jdatetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            msg += f"\n\n⏱ آخرین بروزرسانی: {now_shamsi_str()}"
             try:
                 await bot.send_message(tg, safe_text(msg))
             except Exception as e:
@@ -322,7 +364,7 @@ async def check_changes():
                     msg += "⏳ Newly Expiring:\n" + "\n".join(new_expiring) + "\n"
                 if new_expired:
                     msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
-                msg += f"\n\n⏱ آخرین بروزرسانی: {jdatetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                msg += f"\n\n⏱ آخرین بروزرسانی: {now_shamsi_str()}"
                 try:
                     await bot.send_message(tg, safe_text(msg))
                 except Exception as e:
