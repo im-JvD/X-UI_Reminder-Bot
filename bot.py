@@ -1,5 +1,6 @@
 # Version: 1.0.0 - Stable
 import os, asyncio, aiosqlite, time, traceback, json
+import jdatetime
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
@@ -196,6 +197,9 @@ async def report_cmd(m: Message):
         inbound_ids = [r[0] for r in rows]
         report, _ = await build_report(inbound_ids)
 
+    # افزودن تاریخ شمسی
+    report += f"\n\n⏱ آخرین بروزرسانی: {jdatetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_report")]
@@ -220,6 +224,9 @@ async def refresh_report(query):
         inbound_ids = [r[0] for r in rows]
         report, _ = await build_report(inbound_ids)
 
+    # افزودن تاریخ شمسی
+    report += f"\n\n⏱ آخرین بروزرسانی: {jdatetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_report")]
@@ -228,7 +235,7 @@ async def refresh_report(query):
     await query.message.edit_text(report, reply_markup=kb)
     await query.answer("✅ گزارش بروزرسانی شد", show_alert=False)
 
-# --- JOBS (send_full_reports, check_changes) ---
+# --- JOBS ---
 async def send_full_reports():
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
@@ -237,6 +244,8 @@ async def send_full_reports():
             ibs = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (tg,))
         inbound_ids = [r[0] for r in ibs]
         report, details = await build_report(inbound_ids)
+        # افزودن تاریخ شمسی
+        report += f"\n\n⏱ آخرین بروزرسانی: {jdatetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         try:
             await bot.send_message(tg, "📢 Daily Full Report:\n" + report)
         except Exception as e:
@@ -250,6 +259,7 @@ async def send_full_reports():
     if isinstance(data, list):
         all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
         report, details = await build_report(all_ids)
+        report += f"\n\n⏱ آخرین بروزرسانی: {jdatetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         for tg in SUPERADMINS:
             try:
                 await bot.send_message(tg, "📢 Daily Full Panel Report:\n" + report)
@@ -283,6 +293,7 @@ async def check_changes():
                 msg += "⏳ Newly Expiring (&lt;24h):\n" + "\n".join(new_expiring) + "\n"
             if new_expired:
                 msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
+            msg += f"\n\n⏱ آخرین بروزرسانی: {jdatetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             try:
                 await bot.send_message(tg, safe_text(msg))
             except Exception as e:
@@ -312,6 +323,7 @@ async def check_changes():
                     msg += "⏳ Newly Expiring:\n" + "\n".join(new_expiring) + "\n"
                 if new_expired:
                     msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
+                msg += f"\n\n⏱ آخرین بروزرسانی: {jdatetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                 try:
                     await bot.send_message(tg, safe_text(msg))
                 except Exception as e:
