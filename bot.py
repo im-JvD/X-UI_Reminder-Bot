@@ -1,4 +1,4 @@
-# Version: 1.3.9 - Stable Full + Debug + safe_text(superadmin notify)
+# Version: 1.4.0
 import os, asyncio, aiosqlite, time, traceback, json
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -186,6 +186,33 @@ def analyze_inbound(ib, online_emails):
     stats = {"users": 0, "up": 0, "down": 0, "online": 0, "expiring": [], "expired": []}
     if not isinstance(ib, dict):
         return stats
+
+def _collect_emails_for_inbounds(inbound_ids: list[int]) -> list[str]:
+    emails = []
+    try:
+        data = api.inbounds()
+        if not isinstance(data, list):
+            return emails
+        for ib in data:
+            if not isinstance(ib, dict) or ib.get("id") not in inbound_ids:
+                continue
+            settings = ib.get("settings")
+            if isinstance(settings, str):
+                try:
+                    settings = json.loads(settings)
+                except Exception:
+                    settings = {}
+            if not isinstance(settings, dict):
+                settings = {}
+            clients = settings.get("clients", ib.get("clients", []))
+            for c in clients:
+                em = c.get("email")
+                if em:
+                    emails.append(em)
+    except Exception as e:
+        log_error(e)
+    return emails
+
     settings = ib.get("settings")
     if isinstance(settings, str):
         try:
@@ -217,15 +244,10 @@ def analyze_inbound(ib, online_emails):
     return stats
 
 async def build_report(inbound_ids: list[int]):
-    """
-    Build the admin/reseller report in the requested Farsi format with bold tags.
-    NOTE: We do NOT escape the final string with safe_text because we intentionally include HTML (<b>).
-    """
     try:
         data = api.inbounds()
         if not isinstance(data, list):
-            # This message has no HTML tags, so safe_text is fine here.
-            return safe_text(f"❌ Invalid response from panel: {data}"), {"expiring": [], "expired": [], "up": 0, "down": 0}
+            return safe_text(f"❌ پاسخ نامعتبر از پنل: {data}"), {"expiring": [], "expired": [], "up": 0, "down": 0}
         online_emails = set(api.online_clients() or [])
         total_users = total_up = total_down = online_count = 0
         expiring, expired = [], []
@@ -239,18 +261,23 @@ async def build_report(inbound_ids: list[int]):
             online_count += s["online"]
             expiring.extend(s["expiring"])
             expired.extend(s["expired"])
-        # New Farsi + bold formatted report
+
         report = (
-            "📊 <b>گزارش نهایی از وضعیت فعلی پنل شما : </b>\n\n"
-            f"👥 <b>تعداد کل کاربران شما :</b> [ {total_users} ] \n"
-            f"🟢 <b>تعداد کاربران آنلاین :</b> [ {online_count} ] \n"
-            f"⏳ <b>کاربرانی که بزودی منقضی خواهند شد :</b> [ {len(expiring)} ] \n"
+            "📊 <b>گزارش نهایی از وضعیت فعلی شما : </b>
+
+"
+            f"👥 <b>تعداد کل کاربران شما :</b> [ {total_users} ]
+"
+            f"🟢 <b>تعداد کاربران آنلاین :</b> [ {online_count} ]
+"
+            f"⏳ <b>کاربرانی که بزودی منقضی خواهند شد :</b> [ {len(expiring)} ]
+"
             f"🚫 <b>کاربرانی که منقضی شده‌اند :</b> [ {len(expired)} ]"
         )
         return report, {"expiring": expiring, "expired": expired, "up": total_up, "down": total_down}
     except Exception as e:
         log_error(e)
-        return "❌ Error while generating report. Check log.txt", {"expiring": [], "expired": [], "up": 0, "down": 0}
+        return "❌ خطا در تولید گزارش. log.txt را بررسی کنید.", {"expiring": [], "expired": [], "up": 0, "down": 0}
 
 @dp.message(Command("report"))
 async def report_cmd(m: Message):
@@ -269,7 +296,7 @@ async def report_cmd(m: Message):
 
     report += f"\n\n{now_shamsi_str()}"
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_report")]
+        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_report")]
     ])
     await m.answer(report, reply_markup=kb)
 
@@ -292,11 +319,191 @@ async def refresh_report(query):
 
     report += f"\n\n{now_shamsi_str()}"
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_report")]
+        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_report")]
     ])
     try:
         await query.message.edit_text(report, reply_markup=kb)
         await query.answer("✅ گزارش بروزرسانی شد", show_alert=False)
+    except Exception as e:
+        log_error(e)
+        await query.answer("ℹ️ تغییری نسبت به گزارش قبلی نبود.", show_alert=False)
+
+# --- EXTRA COMMANDS ---
+@dp.message(Command("online"))
+async def online_cmd(m: Message):
+    # Determine scope
+    if m.from_user.id in SUPERADMINS:
+        data = api.inbounds()
+        inbound_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
+    else:
+        async with aiosqlite.connect("data.db") as db:
+            rows = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (m.from_user.id,))
+        if not rows:
+            await m.answer("❌ هیچ اینباندی به شما اختصاص داده نشده.")
+            return
+        inbound_ids = [r[0] for r in rows]
+    online_all = set(api.online_clients() or [])
+    my_emails = set(_collect_emails_for_inbounds(inbound_ids))
+    online = sorted(online_all & my_emails)
+    # Build message
+    msg = f"🟢 <b>تعداد کل کاربران آنلاین شما</b> [ {len(online)} ]
+
+"
+    if online:
+        msg += "
+".join([f"👤 - [ {safe_text(u)} ]" for u in online])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_online")]
+    ])
+    await m.answer(msg, reply_markup=kb)
+
+@dp.callback_query(F.data == "refresh_online")
+async def refresh_online(query):
+    user_id = query.from_user.id
+    if user_id in SUPERADMINS:
+        data = api.inbounds()
+        inbound_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
+    else:
+        async with aiosqlite.connect("data.db") as db:
+            rows = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (user_id,))
+        if not rows:
+            await query.message.edit_text("❌ هیچ اینباندی به شما اختصاص داده نشده.")
+            await query.answer()
+            return
+        inbound_ids = [r[0] for r in rows]
+    online_all = set(api.online_clients() or [])
+    my_emails = set(_collect_emails_for_inbounds(inbound_ids))
+    online = sorted(online_all & my_emails)
+    msg = f"🟢 <b>تعداد کل کاربران آنلاین شما</b> [ {len(online)} ]
+
+"
+    if online:
+        msg += "
+".join([f"👤 - [ {safe_text(u)} ]" for u in online])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_online")]
+    ])
+    try:
+        await query.message.edit_text(msg, reply_markup=kb)
+        await query.answer("✅ بروزرسانی شد", show_alert=False)
+    except Exception as e:
+        log_error(e)
+        await query.answer("ℹ️ تغییری نسبت به گزارش قبلی نبود.", show_alert=False)
+
+
+@dp.message(Command("expiring"))
+async def expiring_cmd(m: Message):
+    # Determine scope
+    if m.from_user.id in SUPERADMINS:
+        data = api.inbounds()
+        inbound_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
+    else:
+        async with aiosqlite.connect("data.db") as db:
+            rows = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (m.from_user.id,))
+        if not rows:
+            await m.answer("❌ هیچ اینباندی به شما اختصاص داده نشده.")
+            return
+        inbound_ids = [r[0] for r in rows]
+    _, details = await build_report(inbound_ids)
+    expiring = sorted(details.get("expiring", []))
+    msg = f"🟢 <b>تعداد کل کاربران رو به انقضا شما</b> [ {len(expiring)} ]
+
+"
+    if expiring:
+        msg += "
+".join([f"👤 - [ {safe_text(u)} ]" for u in expiring])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_expiring")]
+    ])
+    await m.answer(msg, reply_markup=kb)
+
+@dp.callback_query(F.data == "refresh_expiring")
+async def refresh_expiring(query):
+    user_id = query.from_user.id
+    if user_id in SUPERADMINS:
+        data = api.inbounds()
+        inbound_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
+    else:
+        async with aiosqlite.connect("data.db") as db:
+            rows = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (user_id,))
+        if not rows:
+            await query.message.edit_text("❌ هیچ اینباندی به شما اختصاص داده نشده.")
+            await query.answer()
+            return
+        inbound_ids = [r[0] for r in rows]
+    _, details = await build_report(inbound_ids)
+    expiring = sorted(details.get("expiring", []))
+    msg = f"🟢 <b>تعداد کل کاربران رو به انقضا شما</b> [ {len(expiring)} ]
+
+"
+    if expiring:
+        msg += "
+".join([f"👤 - [ {safe_text(u)} ]" for u in expiring])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_expiring")]
+    ])
+    try:
+        await query.message.edit_text(msg, reply_markup=kb)
+        await query.answer("✅ بروزرسانی شد", show_alert=False)
+    except Exception as e:
+        log_error(e)
+        await query.answer("ℹ️ تغییری نسبت به گزارش قبلی نبود.", show_alert=False)
+
+
+@dp.message(Command("expired"))
+async def expired_cmd(m: Message):
+    # Determine scope
+    if m.from_user.id in SUPERADMINS:
+        data = api.inbounds()
+        inbound_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
+    else:
+        async with aiosqlite.connect("data.db") as db:
+            rows = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (m.from_user.id,))
+        if not rows:
+            await m.answer("❌ هیچ اینباندی به شما اختصاص داده نشده.")
+            return
+        inbound_ids = [r[0] for r in rows]
+    _, details = await build_report(inbound_ids)
+    expired = sorted(details.get("expired", []))
+    msg = f"🟢 <b>تعداد کل کاربران منقضی شده شما</b> [ {len(expired)} ]
+
+"
+    if expired:
+        msg += "
+".join([f"👤 - [ {safe_text(u)} ]" for u in expired])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_expired")]
+    ])
+    await m.answer(msg, reply_markup=kb)
+
+@dp.callback_query(F.data == "refresh_expired")
+async def refresh_expired(query):
+    user_id = query.from_user.id
+    if user_id in SUPERADMINS:
+        data = api.inbounds()
+        inbound_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
+    else:
+        async with aiosqlite.connect("data.db") as db:
+            rows = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (user_id,))
+        if not rows:
+            await query.message.edit_text("❌ هیچ اینباندی به شما اختصاص داده نشده.")
+            await query.answer()
+            return
+        inbound_ids = [r[0] for r in rows]
+    _, details = await build_report(inbound_ids)
+    expired = sorted(details.get("expired", []))
+    msg = f"🟢 <b>تعداد کل کاربران منقضی شده شما</b> [ {len(expired)} ]
+
+"
+    if expired:
+        msg += "
+".join([f"👤 - [ {safe_text(u)} ]" for u in expired])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_expired")]
+    ])
+    try:
+        await query.message.edit_text(msg, reply_markup=kb)
+        await query.answer("✅ بروزرسانی شد", show_alert=False)
     except Exception as e:
         log_error(e)
         await query.answer("ℹ️ تغییری نسبت به گزارش قبلی نبود.", show_alert=False)
@@ -379,7 +586,7 @@ def _format_expired_msg_reseller(name: str) -> str:
     )
 
 async def check_changes():
-    # changes for each reseller
+    # For each reseller
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     for (tg,) in rows:
@@ -398,13 +605,37 @@ async def check_changes():
 
         # Send per-user formatted messages to reseller
         for user_name in new_expiring:
+            msg = (
+                "📢 <b>نماینده محترم ... </b>
+
+"
+                "⏳ اشتراک با مشخصات زیر، <b>[ بزودی ]</b> منقضی خواهد شد ... 
+
+"
+                f"👥 [ {safe_text(user_name)} ]
+
+"
+                "+ <b>درصورت تمایل ، نسبت به شارژ مجدد از داخل پنل کاربری خود اقدام کنید </b>"
+            )
             try:
-                await bot.send_message(tg, _format_expiring_msg_reseller(user_name))
+                await bot.send_message(tg, msg)
             except Exception as e:
                 log_error(e)
         for user_name in new_expired:
+            msg = (
+                "📢 <b>نماینده محترم ... </b>
+
+"
+                "⏳ اشتراک با مشخصات زیر ، <b>[ منقضی ]</b> گردیده است ... 
+
+"
+                f"👥 [ {safe_text(user_name)} ]
+
+"
+                "+ <b>درصورت تمایل ، نسبت به شارژ مجدد از داخل پنل کاربری خود اقدام کنید </b>"
+            )
             try:
-                await bot.send_message(tg, _format_expired_msg_reseller(user_name))
+                await bot.send_message(tg, msg)
             except Exception as e:
                 log_error(e)
 
@@ -415,7 +646,7 @@ async def check_changes():
             )
             await db.commit()
 
-    # panel changes for superadmins
+    # Panel changes for superadmins (whole panel)
     data = api.inbounds()
     if isinstance(data, list):
         all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
@@ -429,15 +660,38 @@ async def check_changes():
             new_expiring = [u for u in details["expiring"] if u not in last["expiring"]]
             new_expired = [u for u in details["expired"] if u not in last["expired"]]
 
-            # Send per-user formatted messages to superadmin
             for user_name in new_expiring:
+                msg = (
+                    "📢 <b>مدیرت محترم ... </b>
+
+"
+                    "⏳ اشتراک با مشخصات زیر، <b>[ بزودی ]</b> منقضی خواهد شد ... 
+
+"
+                    f"👥 [ {safe_text(user_name)} ]
+
+"
+                    "+ <b>درصورت تمایل ، نسبت به شارژ مجدد از داخل پنل کاربری خود اقدام کنید </b>"
+                )
                 try:
-                    await bot.send_message(tg, _format_expiring_msg_super(user_name))
+                    await bot.send_message(tg, msg)
                 except Exception as e:
                     log_error(e)
             for user_name in new_expired:
+                msg = (
+                    "📢 <b>نماینده محترم ... </b>
+
+"
+                    "⏳ اشتراک با مشخصات زیر ، <b>[ منقضی ]</b> گردیده است ... 
+
+"
+                    f"👥 [ {safe_text(user_name)} ]
+
+"
+                    "+ <b>درصورت تمایل ، نسبت به شارژ مجدد از داخل پنل کاربری خود اقدام کنید </b>"
+                )
                 try:
-                    await bot.send_message(tg, _format_expired_msg_super(user_name))
+                    await bot.send_message(tg, msg)
                 except Exception as e:
                     log_error(e)
 
