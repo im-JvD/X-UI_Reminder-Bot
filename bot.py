@@ -76,7 +76,7 @@ def gregorian_to_jalali(g_y, g_m, g_d):
 
 def now_shamsi_str():
     now = datetime.now()
-    jy, jm, jd = gregorian_to_jalali(now.year, now.month, now.day)
+    jy, jm, jd = gregorian_to_jalali(now.day, now.month, now.year)
     return f"{jy:04d}-{jm:02d}-{jd:02d} {now.strftime('%H:%M:%S')}"
 
 # --- DB ---
