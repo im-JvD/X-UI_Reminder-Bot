@@ -320,7 +320,7 @@ async def online_cmd(m: Message):
         inbound_ids = [r[0] for r in rows]
         report, details = await build_report(inbound_ids)
         online = set(api.online_clients() or [])
-    msg = "🟢 کاربران آنلاین:
+    msg = "🟢 کاربران آنلاین:/n"
 
 "
     if online:
