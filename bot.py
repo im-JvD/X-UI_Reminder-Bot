@@ -236,11 +236,12 @@ async def build_report(inbound_ids: list[int]):
             online_count += s["online"]
             expiring.extend(s["expiring"])
             expired.extend(s["expired"])
-        report = (f"📊 Report:\n"
-                  f"👥 Users: {total_users}\n"
-                  f"🟢 Online: {online_count}\n"
-                  f"⏳ Expiring (&lt;24h): {len(expiring)}\n"
-                  f"🚫 Expired: {len(expired)}")
+        report = (f"📊 <b>گزارش مربوط به اینباند شما :<b>\n"
+                  f"\n"
+                  f"👥 <b>تعداد کاربران <b>: {total_users}\n"
+                  f"🟢 <b>کاربران آنلاین <b>: {online_count}\n"
+                  f"⏳ <b>کاربرانی که بزودی منقضی خواهند شد <b>: {len(expiring)}\n"
+                  f"🚫 <b>کاربران منقضی شده <b>: {len(expired)}")
         return safe_text(report), {"expiring": expiring, "expired": expired, "up": total_up, "down": total_down}
     except Exception as e:
         log_error(e)
@@ -354,11 +355,11 @@ async def check_changes():
         new_expired = [u for u in details["expired"] if u not in last["expired"]]
 
         if new_expiring or new_expired:
-            msg = "📢 Changes detected:\n"
+            msg = "📢 <b>نماینده محترم ...</b>\n"
             if new_expiring:
-                msg += "⏳ Newly Expiring (&lt;24h):\n" + "\n".join(new_expiring) + "\n"
+                msg += "   ⏳ کاربر با نام اشتراک زیر بزودی منقضی خواهد شد\n\n" + "\n".join(new_expiring) + "\n"
             if new_expired:
-                msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
+                msg += "   🚫 کاربر با مشخصات زیر ، منقضی گردید\n" + "\n".join(new_expired)
             try:
                 await bot.send_message(tg, safe_text(msg))
             except Exception as e:
@@ -386,11 +387,11 @@ async def check_changes():
             new_expired = [u for u in details["expired"] if u not in last["expired"]]
 
             if new_expiring or new_expired:
-                msg = "📢 SuperAdmin - Panel Changes:\n"
+                msg = "📢 <b>مدیریت محترم ...</b>\n"
                 if new_expiring:
-                    msg += "⏳ Newly Expiring:\n" + "\n".join(new_expiring) + "\n"
+                    msg += "   ⏳ کاربر با نام اشتراک زیر بزودی منقضی خواهد شد\n\n".join(new_expiring) + "\n"
                 if new_expired:
-                    msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
+                    msg += "   🚫 کاربر با مشخصات زیر ، منقضی گردید\n" + "\n".join(new_expired)
                 try:
                     await bot.send_message(tg, safe_text(msg))
                 except Exception as e:
