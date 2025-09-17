@@ -32,7 +32,7 @@ class PanelAPI:
         self.last_login = time.time()
 
     def _safe_json(self, response):
-        """تبدیل خروجی به JSON یا برگردوندن متن خطا"""
+        
         try:
             return response.json()
         except Exception:
@@ -42,11 +42,11 @@ class PanelAPI:
             return {"error": f"❌ Non-JSON response from panel: {txt}"}
 
     def _extract_obj(self, data):
-        """اگه جواب دیکشنری باشه و کلید obj داشته باشه، همونو برمی‌گردونیم"""
+        
         if isinstance(data, dict):
             if "obj" in data:
                 return data["obj"]
-            # اگه خطا برگشته باشه
+            
             if "error" in data:
                 return data
         return data
