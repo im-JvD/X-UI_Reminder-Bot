@@ -1,4 +1,4 @@
-# Version: 1.3.8 - Stable Full + Debug
+# Version: 1.3.9 - Stable Full + Debug + safe_text(superadmin notify)
 import os, asyncio, aiosqlite, time, traceback, json
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -140,7 +140,8 @@ async def start(m: Message):
         for admin_id in SUPERADMINS:
             try:
                 print(f"DEBUG: sending new user info to superadmin {admin_id}")
-                await bot.send_message(admin_id, txt, reply_markup=kb)
+                # IMPORTANT FIX: safe_text to avoid HTML parse errors
+                await bot.send_message(admin_id, safe_text(txt), reply_markup=kb)
             except Exception as e:
                 print(f"DEBUG: failed sending to {admin_id} error={e}")
                 log_error(e)
@@ -291,13 +292,12 @@ async def refresh_report(query):
         await query.message.edit_text(report, reply_markup=kb)
         await query.answer("✅ گزارش بروزرسانی شد", show_alert=False)
     except Exception as e:
-        # message is not modified → نادیده
         log_error(e)
         await query.answer("ℹ️ تغییری نسبت به گزارش قبلی نبود.", show_alert=False)
 
 # --- JOBS ---
 async def send_full_reports():
-    # برای همه ریسلرها
+    # for all resellers
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     for (tg,) in rows:
@@ -317,7 +317,7 @@ async def send_full_reports():
             )
             await db.commit()
 
-    # سوپر ادمین‌ها: گزارش کل پنل
+    # for superadmins: whole panel
     data = api.inbounds()
     if isinstance(data, list):
         all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
@@ -336,7 +336,7 @@ async def send_full_reports():
                 await db.commit()
 
 async def check_changes():
-    # تغییرات برای هر ریسلر
+    # changes for each reseller
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     for (tg,) in rows:
@@ -371,7 +371,7 @@ async def check_changes():
             )
             await db.commit()
 
-    # تغییرات برای سوپر ادمین‌ها (کل پنل)
+    # panel changes for superadmins
     data = api.inbounds()
     if isinstance(data, list):
         all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
