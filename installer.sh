@@ -19,7 +19,7 @@ pause() {
 show_menu() {
   clear
   echo -e "${BLUE}========================================${NC}"
-  echo -e "${GREEN}  X-UI Pannel's Reminder Bot Manager   ${NC}"
+  echo -e "${GREEN}  X-UI Reseller Reminder Bot Manager   ${NC}"
   echo -e "${BLUE}========================================${NC}"
   echo -e "${GREEN}1)${NC} Install Bot"
   echo -e "${GREEN}2)${NC} Start/Restart Bot"
@@ -67,15 +67,15 @@ install_bot() {
   pip install -r requirements.txt
 
   echo -e "${YELLOW}🔑 Please enter required information:${NC}"
-  read -p "${GREEN}Telegram Bot Token: " BOT_TOKEN
-  read -p "${GREEN}Required Channel Username or ID (e.g. ${BLUE}@MyChannel${GREEN}): " CHANNEL
-  read -p "Super Admin Telegram ID (${BLUE}s, comma separated${GREEN}): " SUPERADMIN
+  read -p "Telegram Bot Token: " BOT_TOKEN
+  read -p "Required Channel Username or ID (e.g. @MyChannel): " CHANNEL
+  read -p "Super Admin Telegram ID(s, comma separated): " SUPERADMIN
   echo ""
-  echo -e "${YELLOW}Enter your FULL X-UI panel URL ${GREEN}:"
-  echo -e "${GREEN}Example :( ${BLUE}https://panel.example.com:2053/webbasepath ${GREEN})"
-  read -p "${GREEN}Panel Full URL : " FULL_URL
-  read -p "${GREEN}Panel Username : " PANEL_USER
-  read -p "${GREEN}Panel Password : " PANEL_PASS
+  echo -e "${YELLOW}Enter your FULL X-UI panel URL (including schema, port, and base path if any):${NC}"
+  echo -e "${BLUE}Example:${NC} https://sub.example.com:2053/webbasepath"
+  read -p "Panel Full URL: " FULL_URL
+  read -p "Panel Username: " PANEL_USER
+  read -p "Panel Password: " PANEL_PASS
 
   PANEL_BASE=$(echo $FULL_URL | sed -E 's#(https?://[^/]+).*#\1#')
   WEBBASEPATH=$(echo $FULL_URL | sed -E 's#https?://[^/]+(/.*)?#\1#')
