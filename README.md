@@ -39,7 +39,10 @@
 sudo bash -c "$(curl -sL https://raw.githubusercontent.com/im-JvD/X-UI_Reminder-Bot/refs/heads/main/installer.sh)"
 ```
 ‌
-1. مرحله اول
+1. جهت نصب و اجرای ربات گزینه `1` 
+- توکن دریافتی از بات‌فادر
+- آی‌دی کانال عضویت اجباری
+- آدرس کامل پنل `X-UI` ( `panel.example.com:2053/webbasepath` )
 2. مرحله دوم
 ‌
 ‌
