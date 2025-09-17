@@ -335,7 +335,6 @@ async def check_changes():
                 msg += "⏳ Newly Expiring (&lt;24h):\n" + "\n".join(new_expiring) + "\n"
             if new_expired:
                 msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
-            msg += f"\n\n{now_shamsi_str()}"
             try:
                 await bot.send_message(tg, safe_text(msg))
             except Exception as e:
@@ -365,7 +364,6 @@ async def check_changes():
                     msg += "⏳ Newly Expiring:\n" + "\n".join(new_expiring) + "\n"
                 if new_expired:
                     msg += "🚫 Newly Expired:\n" + "\n".join(new_expired)
-                msg += f"\n\n{now_shamsi_str()}"
                 try:
                     await bot.send_message(tg, safe_text(msg))
                 except Exception as e:
