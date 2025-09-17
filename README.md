@@ -35,4 +35,7 @@
 sudo bash -c "$(curl -sL https://raw.githubusercontent.com/im-JvD/X-UI_Reminder-Bot/refs/heads/main/installer.sh)"
 ```
 ‌
+1. مرحله اول
+2. مرحله دوم
+‌
 ‌
