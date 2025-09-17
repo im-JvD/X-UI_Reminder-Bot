@@ -244,7 +244,6 @@ async def send_full_reports():
             ibs = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (tg,))
         inbound_ids = [r[0] for r in ibs]
         report, details = await build_report(inbound_ids)
-        # افزودن تاریخ شمسی
         report += f"\n\n⏱ آخرین بروزرسانی: {jdatetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         try:
             await bot.send_message(tg, "📢 Daily Full Report:\n" + report)
