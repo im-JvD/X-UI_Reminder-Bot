@@ -120,7 +120,7 @@ async def start(m: Message):
     print(f"DEBUG START: user_id={m.from_user.id}, is_new={is_new}, SUPERADMINS={SUPERADMINS}")
 
     # Welcome message
-    await m.answer("👋 به ربات 3X-UI خوش آمدید!", reply_markup=MAIN_KB)
+    await m.answer("👋 به ربات گزارش‌دهی X-UI خوش‌آمدید .", reply_markup=MAIN_KB)
 
     # Notify superadmins only once (when user is really new)
     if is_new:
@@ -175,7 +175,7 @@ async def process_inbound_id(m: Message):
         await db.execute("UPDATE users SET role=? WHERE telegram_id=?", ("reseller", target_user))
         await db.execute("INSERT OR IGNORE INTO reseller_inbounds(telegram_id, inbound_id) VALUES (?, ?)", (target_user, inbound_id))
         await db.commit()
-    await m.answer(f"✅ کاربر {target_user} به عنوان ادمین ریسلر ثبت شد و اینباند {inbound_id} اختصاص داده شد.")
+    await m.answer(f"✅ کاربر {target_user} به عنوان ادمین فروشنده ثبت شد و اینباند {inbound_id} به او اختصاص داده شد .")
     try:
         await bot.send_message(target_user, f"✅ شما به عنوان ادمین ریسلر ثبت شدید.\n📦 اینباند اختصاصی شما: {inbound_id}")
     except Exception as e:
