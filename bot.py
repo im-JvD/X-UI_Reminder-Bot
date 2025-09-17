@@ -79,6 +79,7 @@ def hb(n):
     return f"{n}{units[i]}"
 
 def safe_text(s: str) -> str:
+    # برای جلوگیری از شکستن HTML توسط تلگرام
     return (s.replace("&", "&amp;")
              .replace("<", "&lt;")
              .replace(">", "&gt;"))
@@ -136,9 +137,12 @@ def analyze_inbound(ib, online_emails):
         if not isinstance(c, dict):
             continue
         stats["users"] += 1
+
+        # Online detection by email
         if c.get("email") in online_emails:
             stats["online"] += 1
 
+        # Only time-based rules (traffic-based removed)
         exp = int(c.get("expiryTime", 0) or c.get("expire", 0))
         rem = (exp / 1000) - time.time() if exp > 0 else None
 
@@ -178,30 +182,13 @@ async def build_report(inbound_ids):
         log_error(e)
         return "❌ Error while generating report. Check log.txt", {"expiring": [], "expired": []}
 
-# --- SUPERADMIN COMMAND ---
-@dp.message(Command("report_all"))
-async def report_all(m: Message):
-    if not await is_superadmin(m.from_user.id):
-        await m.answer("⛔️ فقط سوپرادمین می‌تونه از این دستور استفاده کنه.")
-        return
-    try:
-        data = api.inbounds()
-        if not isinstance(data, list):
-            await m.answer("❌ خطا در دریافت اطلاعات از پنل.")
-            return
-        all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
-        report, _ = await build_report(all_ids)
-        await m.answer("📢 Full Panel Report:\n" + report)
-    except Exception as e:
-        log_error(e)
-        await m.answer("❌ خطا در ارسال گزارش.")
-
-# --- ADMIN COMMANDS (assign/remove inbound to reseller) ---
+# --- ADMIN COMMANDS ---
 @dp.message(Command("assign"))
 async def assign_inbound(m: Message):
     if not await is_superadmin(m.from_user.id):
         await m.answer("⛔️ Only superadmins can assign inbounds.")
         return
+
     try:
         parts = m.text.split()
         if len(parts) != 3:
@@ -221,6 +208,7 @@ async def remove_inbound(m: Message):
     if not await is_superadmin(m.from_user.id):
         await m.answer("⛔️ Only superadmins can remove inbounds.")
         return
+
     try:
         parts = m.text.split()
         if len(parts) != 3:
@@ -246,8 +234,27 @@ async def my_report(m: Message):
     report, _ = await build_report([r[0] for r in rows])
     await m.answer(report)
 
+# --- SUPERADMIN FULL REPORT ---
+@dp.message(Command("report_all"))
+async def report_all(m: Message):
+    if not await is_superadmin(m.from_user.id):
+        await m.answer("⛔️ فقط سوپرادمین می‌تونه از این دستور استفاده کنه.")
+        return
+    try:
+        data = api.inbounds()
+        if not isinstance(data, list):
+            await m.answer("❌ خطا در دریافت اطلاعات از پنل.")
+            return
+        all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
+        report, _ = await build_report(all_ids)
+        await m.answer("📢 Full Panel Report:\n" + report)
+    except Exception as e:
+        log_error(e)
+        await m.answer("❌ خطا در ارسال گزارش.")
+
 # --- DAILY FULL REPORTS ---
 async def send_full_reports():
+    # Resellers
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     for (tg,) in rows:
@@ -264,13 +271,14 @@ async def send_full_reports():
                              (tg, json.dumps(details), int(time.time())))
             await db.commit()
 
+    # Superadmins
     data = api.inbounds()
     if isinstance(data, list):
         all_ids = [ib.get("id") for ib in data if isinstance(ib, dict)]
-        _, details = await build_report(all_ids)
+        report, details = await build_report(all_ids)
         for tg in SUPERADMINS:
             try:
-                await bot.send_message(tg, "📢 Daily Full Panel Report:\n" + safe_text(report))
+                await bot.send_message(tg, "📢 Daily Full Panel Report:\n" + report)
                 async with aiosqlite.connect("data.db") as db:
                     await db.execute("INSERT OR REPLACE INTO last_reports VALUES (?, ?, ?)",
                                      (tg, json.dumps(details), int(time.time())))
@@ -280,6 +288,8 @@ async def send_full_reports():
 
 # --- CHANGE WATCHER ---
 async def check_changes():
+    """Check inbound status every 1m and send only changes (resellers + superadmins)."""
+
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     for (tg,) in rows:
@@ -291,7 +301,17 @@ async def check_changes():
         async with aiosqlite.connect("data.db") as db:
             cursor = await db.execute("SELECT last_json FROM last_reports WHERE telegram_id=?", (tg,))
             row = await cursor.fetchone()
-            last = json.loads(row[0]) if row and row[0] else {"expiring": [], "expired": []}
+            if row and row[0]:
+                try:
+                    last = json.loads(row[0])
+                    last = {
+                        "expiring": last.get("expiring", []),
+                        "expired": last.get("expired", [])
+                    }
+                except Exception:
+                    last = {"expiring": [], "expired": []}
+            else:
+                last = {"expiring": [], "expired": []}
 
         new_expiring = [u for u in details["expiring"] if u not in last["expiring"]]
         new_expired = [u for u in details["expired"] if u not in last["expired"]]
