@@ -269,7 +269,7 @@ async def report_cmd(m: Message):
 
     report += f"\n\n{now_shamsi_str()}"
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_report")]
+        [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_report")]
     ])
     await m.answer(report, reply_markup=kb)
 
@@ -292,7 +292,7 @@ async def refresh_report(query):
 
     report += f"\n\n{now_shamsi_str()}"
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_report")]
+        [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_report")]
     ])
     try:
         await query.message.edit_text(report, reply_markup=kb)
@@ -319,11 +319,14 @@ async def online_cmd(m: Message):
         inbound_ids = [r[0] for r in rows]
         _, details = await build_report(inbound_ids)
         online = set(api.online_clients() or [])
-    msg = f"🟢 <b>تعداد کل کاربران آنلاین شما</b> [ {len(online)} ]\n\n"
+    msg = "🟢 کاربران آنلاین:\n\n"
     if online:
-        msg += "\n".join([f"👤 - {u}" for u in online])
+        msg += "\n".join(online)
+    else:
+        msg += "هیچ کاربری آنلاین نیست."
+    msg = f"👥 تعداد: {len(online)}\n\n" + msg
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_online")]
+        [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_online")]
     ])
     await m.answer(msg, reply_markup=kb)
 
@@ -345,11 +348,14 @@ async def refresh_online(query):
         inbound_ids = [r[0] for r in rows]
         _, details = await build_report(inbound_ids)
         online = set(api.online_clients() or [])
-    msg = f"🟢 <b>تعداد کل کاربران آنلاین شما</b> [ {len(online)} ]\n\n"
+    msg = "🟢 کاربران آنلاین:\n\n"
     if online:
-        msg += "\n".join([f"👤 - {u}" for u in online])
+        msg += "\n".join(online)
+    else:
+        msg += "هیچ کاربری آنلاین نیست."
+    msg = f"👥 تعداد: {len(online)}\n\n" + msg
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_online")]
+        [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_online")]
     ])
     try:
         await query.message.edit_text(msg, reply_markup=kb)
@@ -375,11 +381,14 @@ async def expiring_cmd(m: Message):
         inbound_ids = [r[0] for r in rows]
         _, details = await build_report(inbound_ids)
         expiring = details.get("expiring", [])
-    msg = f"🟢 <b>تعداد کل کاربران رو به انقضا شما</b> [ {len(expiring)} ]\n\n"
+    msg = "⏳ کاربران رو به انقضا:\n\n"
     if expiring:
-        msg += "\n".join([f"👤 - {u}" for u in expiring])
+        msg += "\n".join(expiring)
+    else:
+        msg += "هیچ کاربری در حال انقضا نیست."
+    msg = f"👥 تعداد: {len(expiring)}\n\n" + msg
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_expiring")]
+        [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_expiring")]
     ])
     await m.answer(msg, reply_markup=kb)
 
@@ -401,11 +410,14 @@ async def refresh_expiring(query):
         inbound_ids = [r[0] for r in rows]
         _, details = await build_report(inbound_ids)
         expiring = details.get("expiring", [])
-    msg = f"🟢 <b>تعداد کل کاربران رو به انقضا شما</b> [ {len(expiring)} ]\n\n"
+    msg = "⏳ کاربران رو به انقضا:\n\n"
     if expiring:
-        msg += "\n".join([f"👤 - {u}" for u in expiring])
+        msg += "\n".join(expiring)
+    else:
+        msg += "هیچ کاربری در حال انقضا نیست."
+    msg = f"👥 تعداد: {len(expiring)}\n\n" + msg
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_expiring")]
+        [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_expiring")]
     ])
     try:
         await query.message.edit_text(msg, reply_markup=kb)
@@ -431,11 +443,14 @@ async def expired_cmd(m: Message):
         inbound_ids = [r[0] for r in rows]
         _, details = await build_report(inbound_ids)
         expired = details.get("expired", [])
-    msg = f"🟢 <b>تعداد کل کاربران منقضی شده شما</b> [ {len(expired)} ]\n\n"
+    msg = "🚫 کاربران منقضی شده:\n\n"
     if expired:
-        msg += "\n".join([f"👤 - {u}" for u in expired])
+        msg += "\n".join(expired)
+    else:
+        msg += "هیچ کاربری منقضی نشده است."
+    msg = f"👥 تعداد: {len(expired)}\n\n" + msg
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_expired")]
+        [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_expired")]
     ])
     await m.answer(msg, reply_markup=kb)
 
@@ -457,15 +472,14 @@ async def refresh_expired(query):
         inbound_ids = [r[0] for r in rows]
         _, details = await build_report(inbound_ids)
         expired = details.get("expired", [])
-    msg = f"🟢 <b>تعداد کل کاربران منقضی شده شما</b> [ {len(expired)} ]\n\n"
+    msg = "🚫 کاربران منقضی شده:\n\n"
     if expired:
-        msg += "\n".join([f"👤 - {u}" for u in expired])
+        msg += "\n".join(expired)
+    else:
+        msg += "هیچ کاربری منقضی نشده است."
+    msg = f"👥 تعداد: {len(expired)}\n\n" + msg
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_expired")]
+        [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_expired")]
     ])
     try:
-        await query.message.edit_text(msg, reply_markup=kb)
-        await query.answer("✅ بروزرسانی شد", show_alert=False)
-    except Exception as e:
-        log_error(e)
-   
+        
