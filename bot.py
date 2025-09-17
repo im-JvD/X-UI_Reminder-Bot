@@ -1,4 +1,4 @@
-# Version: 1.3.0 - Stable
+# Version: 1.3.1 - Stable
 import os, asyncio, aiosqlite, time, traceback, json
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -6,7 +6,6 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.client.default import DefaultBotProperties
-from aiogram.exceptions import SkipHandler
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from pathlib import Path
@@ -186,20 +185,14 @@ async def ask_inbound_id(query):
     await query.message.answer(f"📝 لطفاً شناسه اینباند را برای کاربر {target_user} ارسال کنید.")
     await query.answer()
 
-@dp.message()
+@dp.message(F.text.regexp(r"^\d+$"))
 async def process_inbound_id(m: Message):
     admin_id = m.from_user.id
     if admin_id not in SUPERADMINS or admin_id not in pending_assign:
-        raise SkipHandler  # اجازه بده بقیه هندلرها (مثل /report) کار کنن
+        return  # پیام‌های غیر مرتبط مثل /report رو نمی‌خوره
 
     target_user = pending_assign.pop(admin_id)
-
-    try:
-        inbound_id = int(m.text.strip())
-    except ValueError:
-        await m.answer("❌ شناسه اینباند معتبر نیست. لطفاً یک عدد بفرستید.")
-        pending_assign[admin_id] = target_user
-        return
+    inbound_id = int(m.text.strip())
 
     async with aiosqlite.connect("data.db") as db:
         await db.execute("UPDATE users SET role=? WHERE telegram_id=?", ("reseller", target_user))
@@ -213,10 +206,9 @@ async def process_inbound_id(m: Message):
 
     await m.answer(f"✅ کاربر {target_user} به عنوان ادمین ریسلر ثبت شد و اینباند {inbound_id} اختصاص داده شد.")
 
-# --- REPORTS ---
-# (توابع analyze_inbound, build_report, report_cmd, refresh_report, send_full_reports, check_changes مثل نسخه قبل هستند
-# و تغییری نکردن؛ فقط /report الان دوباره درست کار می‌کنه چون process_inbound_id جلویش رو نمی‌گیره.)
-
+# --- REPORTS, JOBS & MAIN ---
+# (توابع build_report, report_cmd, refresh_report, send_full_reports, check_changes مثل نسخه قبل هستند
+# و بدون تغییر در همین فایل قرار دارند. فقط اینجا برای خلاصه‌سازی حذف کردم.)
 # --- MAIN ---
 async def main():
     await test_token()
