@@ -378,7 +378,7 @@ async def check_changes():
 async def main():
     await test_token()
     await ensure_db()
-    scheduler.add_job(send_full_reports, "interval", hours=24)
+    scheduler.add_job(send_full_reports, "cron", hour=0, minute=0, timezone="Asia/Tehran")
     scheduler.add_job(check_changes, "interval", minutes=1)
     scheduler.start()
     await dp.start_polling(bot)
