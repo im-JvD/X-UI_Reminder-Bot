@@ -19,7 +19,7 @@ sudo bash -c "$(curl -sL https://raw.githubusercontent.com/im-JvD/X-UI_Reminder-
 1. **جهت نصب و اجرای ربات**
 - توکن دریافتی از بات‌فادر
 - آی‌دی کانال عضویت اجباری
-- آدرس کامل پنل **X-UI** **(** `panel.example.com:2053/webbasepath` **)**
+- آدرس کامل پنل **(** `panel.example.com:2053/webbasepath` **)**
 
 2. مرحله دوم
 
