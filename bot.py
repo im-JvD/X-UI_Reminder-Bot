@@ -342,6 +342,42 @@ async def send_full_reports():
                 )
                 await db.commit()
 
+def _format_expiring_msg_super(name: str) -> str:
+    name = safe_text(name)
+    return (
+        "📢 <b>مدیرت محترم ... </b>\n\n"
+        "⏳ اشتراک با مشخصات زیر، <b>[ بزودی ]</b> منقضی خواهد شد ... \n\n"
+        f"👥 [ {name} ]\n\n"
+        "+ <b>درصورت تمایل ، نسبت به شارژ مجدد از داخل پنل کاربری خود اقدام کنید </b>"
+    )
+
+def _format_expiring_msg_reseller(name: str) -> str:
+    name = safe_text(name)
+    return (
+        "📢 <b>نماینده محترم ... </b>\n\n"
+        "⏳ اشتراک با مشخصات زیر، <b>[ بزودی ]</b> منقضی خواهد شد ... \n\n"
+        f"👥 [ {name} ]\n\n"
+        "+ <b>درصورت تمایل ، نسبت به شارژ مجدد از داخل پنل کاربری خود اقدام کنید </b>"
+    )
+
+def _format_expired_msg_super(name: str) -> str:
+    name = safe_text(name)
+    return (
+        "📢 <b>نماینده محترم ... </b>\n\n"
+        "⏳ اشتراک با مشخصات زیر ، <b>[ منقضی ]</b> گردیده است ... \n\n"
+        f"👥 [ {name} ]\n\n"
+        "+ <b>درصورت تمایل ، نسبت به شارژ مجدد از داخل پنل کاربری خود اقدام کنید </b>"
+    )
+
+def _format_expired_msg_reseller(name: str) -> str:
+    name = safe_text(name)
+    return (
+        "📢 <b>نماینده محترم ... </b>\n\n"
+        "⏳ اشتراک با مشخصات زیر ، <b>[ منقضی ]</b> گردیده است ... \n\n"
+        f"👥 [ {name} ]\n\n"
+        "+ <b>درصورت تمایل ، نسبت به شارژ مجدد از داخل پنل کاربری خود اقدام کنید </b>"
+    )
+
 async def check_changes():
     # changes for each reseller
     async with aiosqlite.connect("data.db") as db:
@@ -360,14 +396,15 @@ async def check_changes():
         new_expiring = [u for u in details["expiring"] if u not in last["expiring"]]
         new_expired = [u for u in details["expired"] if u not in last["expired"]]
 
-        if new_expiring or new_expired:
-            msg = "📢 تغییرات جدید:\n"
-            if new_expiring:
-                msg += "⏳ کاربرانی که بزودی منقضی خواهند شد:\n" + "\n".join(new_expiring) + "\n"
-            if new_expired:
-                msg += "🚫 کاربرانی که منقضی شده‌اند:\n" + "\n".join(new_expired)
+        # Send per-user formatted messages to reseller
+        for user_name in new_expiring:
             try:
-                await bot.send_message(tg, safe_text(msg))
+                await bot.send_message(tg, _format_expiring_msg_reseller(user_name))
+            except Exception as e:
+                log_error(e)
+        for user_name in new_expired:
+            try:
+                await bot.send_message(tg, _format_expired_msg_reseller(user_name))
             except Exception as e:
                 log_error(e)
 
@@ -392,14 +429,15 @@ async def check_changes():
             new_expiring = [u for u in details["expiring"] if u not in last["expiring"]]
             new_expired = [u for u in details["expired"] if u not in last["expired"]]
 
-            if new_expiring or new_expired:
-                msg = "📢 تغییرات جدید (سوپرادمین):\n"
-                if new_expiring:
-                    msg += "⏳ کاربرانی که بزودی منقضی خواهند شد:\n" + "\n".join(new_expiring) + "\n"
-                if new_expired:
-                    msg += "🚫 کاربرانی که منقضی شده‌اند:\n" + "\n".join(new_expired)
+            # Send per-user formatted messages to superadmin
+            for user_name in new_expiring:
                 try:
-                    await bot.send_message(tg, safe_text(msg))
+                    await bot.send_message(tg, _format_expiring_msg_super(user_name))
+                except Exception as e:
+                    log_error(e)
+            for user_name in new_expired:
+                try:
+                    await bot.send_message(tg, _format_expired_msg_super(user_name))
                 except Exception as e:
                     log_error(e)
 
