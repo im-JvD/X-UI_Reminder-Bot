@@ -259,7 +259,7 @@ async def build_report(inbound_ids: list[int]):
         for ib in data:
             if not isinstance(ib, dict) or ib.get("id") not in inbound_ids:
                 continue
-            s = analyze_inbound(ib, online_emails)
+            s = analyze_inbound(ib, online_emails) or {"users":0,"up":0,"down":0,"online":0,"expiring":[],"expired":[]}
             total_users += s["users"]
             total_up += s["up"]
             total_down += s["down"]
@@ -385,8 +385,11 @@ async def refresh_online(query):
         [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_online")]
     ])
     try:
+        if query.message.text != msg:
         await query.message.edit_text(msg, reply_markup=kb)
         await query.answer("✅ بروزرسانی شد", show_alert=False)
+    else:
+        await query.answer("ℹ️ بدون تغییر", show_alert=False)
     except Exception as e:
         log_error(e)
         await query.answer("ℹ️ تغییری نسبت به گزارش قبلی نبود.", show_alert=False)
@@ -447,8 +450,11 @@ async def refresh_expiring(query):
         [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_expiring")]
     ])
     try:
+        if query.message.text != msg:
         await query.message.edit_text(msg, reply_markup=kb)
         await query.answer("✅ بروزرسانی شد", show_alert=False)
+    else:
+        await query.answer("ℹ️ بدون تغییر", show_alert=False)
     except Exception as e:
         log_error(e)
         await query.answer("ℹ️ تغییری نسبت به گزارش قبلی نبود.", show_alert=False)
@@ -509,8 +515,11 @@ async def refresh_expired(query):
         [InlineKeyboardButton(text="🔄 بروزرسانی وضعیت", callback_data="refresh_expired")]
     ])
     try:
+        if query.message.text != msg:
         await query.message.edit_text(msg, reply_markup=kb)
         await query.answer("✅ بروزرسانی شد", show_alert=False)
+    else:
+        await query.answer("ℹ️ بدون تغییر", show_alert=False)
     except Exception as e:
         log_error(e)
         await query.answer("ℹ️ تغییری نسبت به گزارش قبلی نبود.", show_alert=False)
@@ -563,8 +572,11 @@ async def refresh_online(query):
         msg += "\n".join([f"👤 - [ {safe_text(u)} ]" for u in online])
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_online")]])
     try:
+        if query.message.text != msg:
         await query.message.edit_text(msg, reply_markup=kb)
         await query.answer("✅ بروزرسانی شد", show_alert=False)
+    else:
+        await query.answer("ℹ️ بدون تغییر", show_alert=False)
     except Exception as e:
         log_error(e)
         await query.answer("ℹ️ تغییری نسبت به گزارش قبلی نبود.", show_alert=False)
@@ -613,8 +625,11 @@ async def refresh_expiring(query):
         msg += "\n".join([f"👤 - [ {safe_text(u)} ]" for u in expiring])
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_expiring")]])
     try:
+        if query.message.text != msg:
         await query.message.edit_text(msg, reply_markup=kb)
         await query.answer("✅ بروزرسانی شد", show_alert=False)
+    else:
+        await query.answer("ℹ️ بدون تغییر", show_alert=False)
     except Exception as e:
         log_error(e)
         await query.answer("ℹ️ تغییری نسبت به گزارش قبلی نبود.", show_alert=False)
@@ -663,8 +678,11 @@ async def refresh_expired(query):
         msg += "\n".join([f"👤 - [ {safe_text(u)} ]" for u in expired])
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_expired")]])
     try:
+        if query.message.text != msg:
         await query.message.edit_text(msg, reply_markup=kb)
         await query.answer("✅ بروزرسانی شد", show_alert=False)
+    else:
+        await query.answer("ℹ️ بدون تغییر", show_alert=False)
     except Exception as e:
         log_error(e)
         await query.answer("ℹ️ تغییری نسبت به گزارش قبلی نبود.", show_alert=False)
