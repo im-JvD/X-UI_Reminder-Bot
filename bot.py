@@ -386,8 +386,11 @@ async def refresh_online(query):
     ])
     try:
         if query.message.text != msg:
+        if query.message.text != msg:
         await query.message.edit_text(msg, reply_markup=kb)
         await query.answer("✅ بروزرسانی شد", show_alert=False)
+    else:
+        await query.answer("ℹ️ بدون تغییر", show_alert=False)
     else:
         await query.answer("ℹ️ بدون تغییر", show_alert=False)
     except Exception as e:
@@ -451,8 +454,11 @@ async def refresh_expiring(query):
     ])
     try:
         if query.message.text != msg:
+        if query.message.text != msg:
         await query.message.edit_text(msg, reply_markup=kb)
         await query.answer("✅ بروزرسانی شد", show_alert=False)
+    else:
+        await query.answer("ℹ️ بدون تغییر", show_alert=False)
     else:
         await query.answer("ℹ️ بدون تغییر", show_alert=False)
     except Exception as e:
@@ -516,8 +522,11 @@ async def refresh_expired(query):
     ])
     try:
         if query.message.text != msg:
+        if query.message.text != msg:
         await query.message.edit_text(msg, reply_markup=kb)
         await query.answer("✅ بروزرسانی شد", show_alert=False)
+    else:
+        await query.answer("ℹ️ بدون تغییر", show_alert=False)
     else:
         await query.answer("ℹ️ بدون تغییر", show_alert=False)
     except Exception as e:
@@ -573,8 +582,11 @@ async def refresh_online(query):
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_online")]])
     try:
         if query.message.text != msg:
+        if query.message.text != msg:
         await query.message.edit_text(msg, reply_markup=kb)
         await query.answer("✅ بروزرسانی شد", show_alert=False)
+    else:
+        await query.answer("ℹ️ بدون تغییر", show_alert=False)
     else:
         await query.answer("ℹ️ بدون تغییر", show_alert=False)
     except Exception as e:
@@ -626,8 +638,11 @@ async def refresh_expiring(query):
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_expiring")]])
     try:
         if query.message.text != msg:
+        if query.message.text != msg:
         await query.message.edit_text(msg, reply_markup=kb)
         await query.answer("✅ بروزرسانی شد", show_alert=False)
+    else:
+        await query.answer("ℹ️ بدون تغییر", show_alert=False)
     else:
         await query.answer("ℹ️ بدون تغییر", show_alert=False)
     except Exception as e:
@@ -679,8 +694,11 @@ async def refresh_expired(query):
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_expired")]])
     try:
         if query.message.text != msg:
+        if query.message.text != msg:
         await query.message.edit_text(msg, reply_markup=kb)
         await query.answer("✅ بروزرسانی شد", show_alert=False)
+    else:
+        await query.answer("ℹ️ بدون تغییر", show_alert=False)
     else:
         await query.answer("ℹ️ بدون تغییر", show_alert=False)
     except Exception as e:
