@@ -13,7 +13,7 @@ LOGIN_URL = f"{PANEL_BASE}{WEBBASEPATH}/login"
 INB_LIST = f"{PANEL_BASE}{WEBBASEPATH}/panel/api/inbounds/list"
 ONLINE = f"{PANEL_BASE}{WEBBASEPATH}/panel/api/inbounds/onlines"
 
-print(f"DEBUG: PANEL_BASE={PANEL_BASE}, WEBBASEPATH={WEBBASEPATH}, LOGIN_URL={LOGIN_URL}")
+print(f"DEBUG: LOGIN_URL = {LOGIN_URL}")
 
 class PanelAPI:
     def __init__(self, username, password):
@@ -28,7 +28,6 @@ class PanelAPI:
         r.raise_for_status()
         if len(self.s.cookies) == 0:
             raise RuntimeError("Login failed (no cookies received).")
-        print(f"DEBUG: Login successful, cookies: {list(self.s.cookies.keys())}")
         self.last_login = time.time()
 
     def _safe_json(self, response):
