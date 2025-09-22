@@ -59,3 +59,9 @@ sudo bash -c "$(curl -sL https://raw.githubusercontent.com/im-JvD/X-UI_Reminder-
 - مشخصات پنل **X-UI** جهت برقراری ارتباط از طریق `API`
 
 ‌
+## 💰 حمایت‌ مالی از این پروژه 
+
+<a href="https://www.coffeebede.com/mohamadjavadkarimi"><img class="img-fluid" src="https://coffeebede.ir/DashboardTemplateV2/app-assets/images/banner/default-yellow.svg" /></a>
+
+
+‌
