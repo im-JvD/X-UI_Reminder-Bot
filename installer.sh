@@ -65,10 +65,12 @@ install_bot() {
   cd "$INSTALL_DIR"
 
   echo -e "${BLUE}📦 Creating Python virtual environment${NC}"
+  rm -rf .venv
   python3 -m venv .venv
   source .venv/bin/activate
   pip install --upgrade pip
   pip install -r requirements.txt
+  deactivate
 
   echo -e "${YELLOW}🔑 Please enter required information:${NC}"
   read -p "Telegram Bot Token: " BOT_TOKEN
@@ -101,7 +103,8 @@ EOF
   ensure_service
   sudo systemctl enable reseller-report-bot
   sudo systemctl restart reseller-report-bot
-  echo -e "${GREEN}✅ Bot installed and started successfully!${NC}"
+
+  echo -e "\n${GREEN}✅ Installation completed successfully!${NC}"
   pause
 }
 
