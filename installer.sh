@@ -26,7 +26,7 @@ show_menu() {
   echo -e "${GREEN}1 -${YELLOW} Install Bot${NC}"
   echo -e "${GREEN}2 -${YELLOW} Start/Restart Bot${NC}"
   echo -e "${GREEN}3 -${YELLOW} Update Bot ${NC}( keep .env & DB )"
-  echo -e "${GREEN}4 - ${RED}Remove Bot (full wipe)${NC}"
+  echo -e "${GREEN}4 - ${RED}Remove Bot ${NC}( Full wipe )"
   echo -e "${GREEN}5 - ${NC}Show Last 100 Log Lines"
   echo -e "${GREEN}6 - ${NC}Show Live Logs"
   echo -e "${GREEN}0 - ${BLUE}Exit"
