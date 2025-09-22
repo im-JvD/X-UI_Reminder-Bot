@@ -1,4 +1,4 @@
-# Version: 1.3.9
+# Version: 1.4.0
 import os, asyncio, aiosqlite, time, traceback, json
 from datetime import datetime
 from zoneinfo import ZoneInfo
