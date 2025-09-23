@@ -57,6 +57,8 @@ EOF
 
 install_bot() {
   echo -e "${GREEN}🔧 Installing bot...${NC}"
+  sudo apt update && apt upgrade -y
+  sudo apt install python3
   sudo systemctl stop reseller-report-bot 2>/dev/null || true
   sudo systemctl disable reseller-report-bot 2>/dev/null || true
   rm -rf "$INSTALL_DIR"
