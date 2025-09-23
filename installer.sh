@@ -65,6 +65,7 @@ install_bot() {
   cd "$INSTALL_DIR"
 
   echo -e "${BLUE}📦 Creating Python virtual environment${NC}"
+  cd "$INSTALL_DIR"
   rm -rf .venv
   python3 -m venv .venv
   source .venv/bin/activate
