@@ -203,7 +203,7 @@ while true; do
     4) update_bot ;;
     5) status_bot ;;
     6) show_logs_live ;;
-    0) echo -e "${GREEN}Support us by giving us a star on GitHub, Thank You.${NC}"; exit 0 ;;
+    0) echo -e "${YELLOW}Support us by giving us a ${GREEN}star on GitHub${YELLOW}, Thank You.${NC}"; exit 0 ;;
     *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
   esac
 done
