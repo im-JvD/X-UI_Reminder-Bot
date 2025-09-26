@@ -20,7 +20,7 @@ show_menu() {
   clear
   echo -e "${BLUE}========================================${NC}"
   echo -e "${GREEN}  X-UI Reseller Reminder Bot Manager   ${NC}"
-  echo -e "${YELLOW}    ‌BOT Version [${GREEN} v1.4.4 ${YELLOW}]   ${NC}"
+  echo -e "${YELLOW}    ‌BOT Version [${GREEN} v1.4.5 ${YELLOW}]   ${NC}"
   echo -e "${BLUE}========================================${NC}"
   echo -e ""
   echo -e "‌   ${GREEN}1 ${NC}-${YELLOW} Install Bot${NC}"
@@ -119,9 +119,20 @@ EOF
 
 restart_bot() {
   echo -e "${BLUE}🔄 Restarting bot service...${NC}"
-  sudo systemctl restart reseller-report-bot
+  sudo systemctl stop reseller-report-bot
+  sudo systemctl enable reseller-report-bot
+  sudo systemctl start reseller-report-bot
   sleep 1
   echo -e "${GREEN}✅ Bot restarted.${NC}"
+  pause
+}
+
+stop_bot() {
+  echo -e "${BLUE}🔄 Stoping BOT service...${NC}"
+  sudo systemctl disable reseller-report-bot
+  sudo systemctl stop reseller-report-bot
+  sleep 1
+  echo -e "${GREEN}✅ Bot has Stoped ...${NC}"
   pause
 }
 
@@ -160,6 +171,11 @@ update_bot() {
   pause
 }
 
+status_bot() {
+echo -e "${GREEN}Bot Status ...${NC}"
+  sudo systemctl status reseller-report-bot
+}
+
 remove_bot() {
   echo -e "${RED}🗑 Removing bot...${NC}"
   sudo systemctl stop reseller-report-bot 2>/dev/null || true
@@ -168,12 +184,6 @@ remove_bot() {
   sudo systemctl daemon-reload
   rm -rf $INSTALL_DIR
   echo -e "${GREEN}✅ Bot removed completely!${NC}"
-  pause
-}
-
-show_logs() {
-  echo -e "${BLUE}📜 Showing last 100 lines of logs:${NC}"
-  sudo journalctl -u reseller-report-bot -n 100 --no-pager
   pause
 }
 
@@ -189,11 +199,11 @@ while true; do
   case $opt in
     1) install_bot ;;
     2) restart_bot ;;
-    3) update_bot ;;
-    4) remove_bot ;;
-    5) show_logs ;;
+    3) stop_bot ;;
+    4) update_bot ;;
+    5) status_bot ;;
     6) show_logs_live ;;
-    0) echo -e "${GREEN}Exiting...${NC}"; exit 0 ;;
+    0) echo -e "${GREEN}Support us by giving us a star on GitHub, Thank You.${NC}"; exit 0 ;;
     *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
   esac
 done
