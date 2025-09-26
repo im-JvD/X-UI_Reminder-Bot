@@ -57,8 +57,6 @@ EOF
 
 install_bot() {
   echo -e "${GREEN}🔧 Installing bot...${NC}"
-  sudo apt update && apt upgrade -y
-  sudo apt install python3
   sudo systemctl stop reseller-report-bot 2>/dev/null || true
   sudo systemctl disable reseller-report-bot 2>/dev/null || true
   rm -rf "$INSTALL_DIR"
@@ -67,12 +65,17 @@ install_bot() {
   cd "$INSTALL_DIR"
 
   echo -e "${BLUE}📦 Creating Python virtual environment${NC}"
-  cd "$INSTALL_DIR"
   rm -rf .venv
   python3 -m venv .venv
+  if [ ! -f ".venv/bin/activate" ]; then
+    echo -e "${RED}❌ Failed to create virtual environment${NC}"
+    pause
+    return
+  fi
+
   source .venv/bin/activate
-  pip install --upgrade pip
-  pip install -r requirements.txt
+  pip install --upgrade pip || { echo -e "${RED}❌ pip upgrade failed${NC}"; deactivate; pause; return; }
+  pip install -r requirements.txt || { echo -e "${RED}❌ Package installation failed${NC}"; deactivate; pause; return; }
   deactivate
 
   echo -e "${YELLOW}🔑 Please enter required information:${NC}"
@@ -108,7 +111,8 @@ EOF
   sudo systemctl restart reseller-report-bot
 
   echo -e "\n${GREEN}✅ Installation completed successfully!${NC}"
-  pause
+  echo -e "${BLUE}Press ENTER to return to menu...${NC}"
+  read
 }
 
 restart_bot() {
