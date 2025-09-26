@@ -112,7 +112,7 @@ EOF
   sudo systemctl enable reseller-report-bot
   sudo systemctl restart reseller-report-bot
 
-  echo -e "\n${GREEN}✅ Installation completed successfully!${NC}"
+  echo -e "\n${GREEN}✅ Installation Completed Successfully!${NC}"
   echo -e "${BLUE}Press ENTER to return to menu...${NC}"
   read
 }
@@ -123,7 +123,7 @@ restart_bot() {
   sudo systemctl enable reseller-report-bot
   sudo systemctl start reseller-report-bot
   sleep 1
-  echo -e "${GREEN}✅ Bot restarted.${NC}"
+  echo -e "${GREEN}✅ Bot has Start/Restarted.${NC}"
   pause
 }
 
@@ -167,7 +167,7 @@ update_bot() {
   sudo systemctl daemon-reload
   sudo systemctl restart reseller-report-bot
 
-  echo -e "${GREEN}✅ Update completed and service restarted.${NC}"
+  echo -e "${GREEN}✅ Update Completed and Service Restarted.${NC}"
   pause
 }
 
@@ -183,7 +183,7 @@ remove_bot() {
   sudo rm -f $SERVICE_FILE
   sudo systemctl daemon-reload
   rm -rf $INSTALL_DIR
-  echo -e "${GREEN}✅ Bot removed completely!${NC}"
+  echo -e "${GREEN}✅ Bot removed Completely!${NC}"
   pause
 }
 
@@ -202,7 +202,8 @@ while true; do
     3) stop_bot ;;
     4) update_bot ;;
     5) status_bot ;;
-    6) show_logs_live ;;
+    6) remove_bot ;;
+    7) show_logs_live ;;
     0) echo -e "${YELLOW}Support us by giving us a ${GREEN}star on GitHub${YELLOW}, Thank You.${NC}"; exit 0 ;;
     *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
   esac
