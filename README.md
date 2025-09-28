@@ -8,9 +8,10 @@
 
 - سوپر ادمین گزارش‌های کل پنل و ادمین ریسلر گزارش‌های مربوط به اینباند مخصوص خودش رو دریافت میکنه ...
 
-
+‌
+‌
 <p align="center">
-  <img src="https://github.com/im-JvD/X-UI_Reminder-Bot/blob/main/Picsart_25-09-17_21-28-38-278.jpg" width="1080px" />
+  <img src="https://github.com/im-JvD/X-UI_Reminder-Bot/blob/main/Pic/ScreenShot.jpg" width="1080px" />
 </p>
 
 ___
