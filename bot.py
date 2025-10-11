@@ -301,10 +301,12 @@ def build_snapshot(inbound_ids: List[int]) -> Dict[str, Any]:
 # ---------------- Formatting ----------------
 def format_main_report(counts: Dict[str,int], usage: Dict[str,int]) -> str:
     used_str = format_bytes(usage.get("used", 0))
-    if usage.get("capacity", 0) > 0:
-        remaining_str = format_bytes(usage.get("remaining", 0))
+
+    # اگر کل ظرفیت اینباند صفر است ولی نامحدود است
+    if usage.get("capacity", 0) == 0 and usage.get("unlimited"):
+        remaining_str = "نامحدود"
     else:
-        remaining_str = "Unlimited" if usage.get("unlimited") else format_bytes(0)
+        remaining_str = format_bytes(usage.get("remaining", 0))
 
     return (
         "📊 <b>گزارش نهایی از وضعیت فعلی شما :</b>\n\n"
@@ -315,6 +317,7 @@ def format_main_report(counts: Dict[str,int], usage: Dict[str,int]) -> str:
         f"⏳ <b>کاربرانی که بزودی منقضی خواهند شد :</b> [ {counts.get('expiring',0)} ]\n"
         f"🚫 <b>کاربرانی که منقضی شده‌اند :</b> [ {counts.get('expired',0)} ]"
     )
+
 
 
 def format_list(header_title: str, items: List[str]) -> str:
