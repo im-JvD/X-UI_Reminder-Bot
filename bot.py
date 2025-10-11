@@ -70,11 +70,14 @@ dp = Dispatcher()
 scheduler = AsyncIOScheduler()
 
 MAIN_KB = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="🆘 Support / Request Reseller")]],
+    keyboard=[
+        [KeyboardButton(text="📊 گزارش کلی")],
+        [KeyboardButton(text="🟢 کاربران آنلاین")],
+        [KeyboardButton(text="⏳ رو به انقضا")],
+        [KeyboardButton(text="🚫 منقضی‌شده")]
+    ],
     resize_keyboard=True
-)
-
-# ---------------- DB ----------------
+)# ---------------- DB ----------------
 async def ensure_db():
     async with aiosqlite.connect("data.db") as db:
         await db.executescript("""
@@ -536,6 +539,24 @@ async def refresh_expired(query: CallbackQuery):
         await query.answer("✅ بروزرسانی شد", show_alert=False)
     else:
         await query.answer("ℹ️ بدون تغییر", show_alert=False)
+
+
+# ---------------- Button Handlers (added) ----------------
+@dp.message(F.text == "📊 گزارش کلی")
+async def btn_report(m: Message):
+    await report_cmd(m)
+
+@dp.message(F.text == "🟢 کاربران آنلاین")
+async def btn_online(m: Message):
+    await online_cmd(m)
+
+@dp.message(F.text == "⏳ رو به انقضا")
+async def btn_expiring(m: Message):
+    await expiring_cmd(m)
+
+@dp.message(F.text == "🚫 منقضی‌شده")
+async def btn_expired(m: Message):
+    await expired_cmd(m)
 
 # ---------------- Nightly Reports & Change Notifications ----------------
 def _format_expiring_msg_super(name: str) -> str:
