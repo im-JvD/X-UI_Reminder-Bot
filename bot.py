@@ -69,6 +69,29 @@ bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
 
+def get_main_kb(user_id: int) -> ReplyKeyboardMarkup:
+    if user_id in SUPERADMINS:
+        return ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="📊 گزارش کلی")],
+                [KeyboardButton(text="🟢 کاربران آنلاین")],
+                [KeyboardButton(text="⏳ رو به انقضا")],
+                [KeyboardButton(text="🚫 منقضی‌شده")],
+                [KeyboardButton(text="🧑‍💼 مدیریت ریسلرها")]
+            ],
+            resize_keyboard=True
+        )
+    else:
+        return ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="📊 گزارش کلی")],
+                [KeyboardButton(text="🟢 کاربران آنلاین")],
+                [KeyboardButton(text="⏳ رو به انقضا")],
+                [KeyboardButton(text="🚫 منقضی‌شده")]
+            ],
+            resize_keyboard=True
+        )
+
 MAIN_KB = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📊 گزارش کلی")],
@@ -344,7 +367,8 @@ async def start_cmd(m: Message):
         await m.answer(f"برای استفاده از ربات ابتدا باید عضو کانال {REQUIRED_CHANNEL_ID} شوید.")
 
     is_new = await ensure_user_and_check_new(m.from_user.id)
-    await m.answer("👋 Welcome to X-UI Reminder Bot!", reply_markup=MAIN_KB)
+    kb = get_main_kb(m.from_user.id)
+    await m.answer("👋 Welcome to X-UI Reminder Bot!", reply_markup=kb)
 
     if is_new:
         u = m.from_user
@@ -542,6 +566,14 @@ async def refresh_expired(query: CallbackQuery):
 
 
 # ---------------- Button Handlers (added) ----------------
+# ---------------- Management Menu ----------------
+MANAGE_RESELLERS_KB = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="➕ افزودن ریسلر جدید", callback_data="add_reseller")],
+    [InlineKeyboardButton(text="🔁 تغییر شناسه اینباند", callback_data="edit_reseller")],
+    [InlineKeyboardButton(text="❌ حذف ریسلر", callback_data="delete_reseller")],
+    [InlineKeyboardButton(text="⬅️ بازگشت به منوی اصلی", callback_data="back_main")]
+])
+
 @dp.message(F.text == "📊 گزارش کلی")
 async def btn_report(m: Message):
     await report_cmd(m)
@@ -557,6 +589,36 @@ async def btn_expiring(m: Message):
 @dp.message(F.text == "🚫 منقضی‌شده")
 async def btn_expired(m: Message):
     await expired_cmd(m)
+
+
+# ---------------- Reseller Management ----------------
+@dp.message(F.text == "🧑‍💼 مدیریت ریسلرها")
+async def manage_resellers_menu(m: Message):
+    if m.from_user.id not in SUPERADMINS:
+        return await m.answer("⛔️ این بخش فقط برای ادمین اصلی در دسترس است.")
+    await m.answer("🧑‍💼 <b>مدیریت ادمین‌های ریسلر</b>\nگزینه مورد نظر را انتخاب کنید:", reply_markup=MANAGE_RESELLERS_KB)
+
+@dp.callback_query(F.data == "add_reseller")
+async def add_reseller_callback(c: CallbackQuery):
+    await c.message.answer("🆔 شناسه تلگرام ریسلر جدید را ارسال کنید:")
+    await c.answer()
+
+@dp.callback_query(F.data == "edit_reseller")
+async def edit_reseller_callback(c: CallbackQuery):
+    await c.message.answer("🆔 شناسه تلگرام ریسلر را بفرستید تا شناسه اینباند جدید را تنظیم کنم:")
+    await c.answer()
+
+@dp.callback_query(F.data == "delete_reseller")
+async def delete_reseller_callback(c: CallbackQuery):
+    await c.message.answer("🆔 شناسه تلگرام ریسلری که می‌خواهید حذف شود را ارسال کنید:")
+    await c.answer()
+
+@dp.callback_query(F.data == "back_main")
+async def back_to_main(c: CallbackQuery):
+    kb = get_main_kb(c.from_user.id)
+    await c.message.answer("↩️ بازگشت به منوی اصلی:", reply_markup=kb)
+    await c.answer()
+
 
 # ---------------- Nightly Reports & Change Notifications ----------------
 def _format_expiring_msg_super(name: str) -> str:
