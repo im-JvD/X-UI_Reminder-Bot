@@ -66,7 +66,7 @@ install_bot() {
   cd "$INSTALL_DIR"
 
   echo -e "${BLUE}📦 Creating Python virtual environment${NC}"
-  apt install python3.12-venv
+  sudo apt install python3.10-venv
   rm -rf .venv
   python3 -m venv .venv
   if [ ! -f ".venv/bin/activate" ]; then
