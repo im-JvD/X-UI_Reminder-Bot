@@ -4,7 +4,6 @@ INSTALL_DIR=/root/reseller-report-bot
 SERVICE_FILE=/etc/systemd/system/reseller-report-bot.service
 REPO="https://github.com/im-JvD/X-UI_Reminder-Bot.git"
 
-# رنگ‌ها
 GREEN='\033[1;92m'
 YELLOW='\033[1;93m'
 BLUE='\033[1;94m'
@@ -20,17 +19,17 @@ show_menu() {
   clear
   echo -e "${BLUE}========================================${NC}"
   echo -e "${GREEN}  X-UI Reseller Reminder Bot Manager   ${NC}"
-  echo -e "${YELLOW}    ‌BOT Version [${GREEN} v1.4.7 ${YELLOW}]   ${NC}"
+  echo -e "${YELLOW}    BOT Version [${GREEN} v1.5.5 ${YELLOW}]   ${NC}"
   echo -e "${BLUE}========================================${NC}"
   echo -e ""
-  echo -e "‌   ${GREEN}1 ${NC}-${YELLOW} Install Bot${NC}"
-  echo -e "‌   ${GREEN}2 ${NC}-${YELLOW} Start/Restart Bot${NC}"
-  echo -e "‌   ${GREEN}3 ${NC}-${YELLOW} Stop Bot${NC}"
-  echo -e "‌   ${GREEN}4 ${NC}-${YELLOW} Update Bot ${NC}( keep .env & DB )"
-  echo -e "‌   ${GREEN}5 ${NC}-${YELLOW} Show Status${NC}"
-  echo -e "‌ ${GREEN}6 ${NC}- ${RED}Remove Bot ${NC}( Full wipe )"
-  echo -e "‌ ${GREEN}7 ${NC}- ${NC}Show Live Logs"
-  echo -e "‌ ${GREEN}0 ${NC}- ${BLUE}Exit ${NC}( CTRL + C )"
+  echo -e "   ${GREEN}1 ${NC}-${YELLOW} Install Bot${NC}"
+  echo -e "   ${GREEN}2 ${NC}-${YELLOW} Start/Restart Bot${NC}"
+  echo -e "   ${GREEN}3 ${NC}-${YELLOW} Stop Bot${NC}"
+  echo -e "   ${GREEN}4 ${NC}-${YELLOW} Update Bot ${NC}"
+  echo -e "   ${GREEN}5 ${NC}-${YELLOW} Show Status${NC}"
+  echo -e " ${GREEN}6 ${NC}- ${RED}Remove Bot ${NC}"
+  echo -e " ${GREEN}7 ${NC}- ${NC}Show Live Logs"
+  echo -e " ${GREEN}0 ${NC}- ${BLUE}Exit ${NC}"
   echo -e ""
   echo -e "${BLUE}========================================${NC}"
   echo -e ""
@@ -56,31 +55,8 @@ EOF
   sudo systemctl daemon-reload
 }
 
-install_bot() {
-  echo -e "${GREEN}🔧 Installing bot...${NC}"
-  sudo systemctl stop reseller-report-bot 2>/dev/null || true
-  sudo systemctl disable reseller-report-bot 2>/dev/null || true
-  rm -rf "$INSTALL_DIR"
-
-  git clone "$REPO" "$INSTALL_DIR"
-  cd "$INSTALL_DIR"
-
-  echo -e "${BLUE}📦 Creating Python virtual environment${NC}"
-  sudo apt install python3.10-venv
-  rm -rf .venv
-  python3 -m venv .venv
-  if [ ! -f ".venv/bin/activate" ]; then
-    echo -e "${RED}❌ Failed to create virtual environment${NC}"
-    pause
-    return
-  fi
-
-  source .venv/bin/activate
-  pip install --upgrade pip || { echo -e "${RED}❌ pip upgrade failed${NC}"; deactivate; pause; return; }
-  pip install -r requirements.txt || { echo -e "${RED}❌ Package installation failed${NC}"; deactivate; pause; return; }
-  deactivate
-
-  echo -e "${YELLOW}🔑 Please enter required information:${NC}"
+configure_env() {
+  echo -e "${YELLOW}🔐 Please enter required information:${NC}"
   read -p "Telegram Bot Token: " BOT_TOKEN
   read -p "Required Channel Username or ID (e.g. @MyChannel): " CHANNEL
   read -p "Super Admin Telegram ID(s, comma separated): " SUPERADMIN
@@ -98,15 +74,53 @@ install_bot() {
   echo -e "${GREEN}✅ Detected PANEL_BASE=$PANEL_BASE${NC}"
   echo -e "${GREEN}✅ Detected WEBBASEPATH=${WEBBASEPATH:-'(none)'}${NC}"
 
-  cat > .env <<EOF
+  rm -f "$INSTALL_DIR/.env"
+
+  cat > "$INSTALL_DIR/.env" <<EOF
+  
 BOT_TOKEN=$BOT_TOKEN
 REQUIRED_CHANNEL_ID=$CHANNEL
 SUPERADMINS=$SUPERADMIN
+
 PANEL_BASE=$PANEL_BASE
-WEBBASEPATH=$WEBBASEPATH
+WEBBASEPATH=$WEBBASEPATH/
 PANEL_USERNAME=$PANEL_USER
 PANEL_PASSWORD=$PANEL_PASS
+
+EXPIRING_DAYS_THRESHOLD=1
+EXPIRING_GB_THRESHOLD=1
+
 EOF
+
+  echo -e "${GREEN}✅ Configuration file (.env) created successfully!${NC}"
+}
+
+install_bot() {
+  echo -e "${GREEN}🔧 Installing bot...${NC}"
+  sudo systemctl stop reseller-report-bot 2>/dev/null || true
+  sudo systemctl disable reseller-report-bot 2>/dev/null || true
+  rm -rf "$INSTALL_DIR"
+
+  git clone "$REPO" "$INSTALL_DIR"
+  cd "$INSTALL_DIR"
+
+  echo -e "${BLUE}📦 Creating Python virtual environment${NC}"
+  sudo apt install python3.10-venv -y
+  rm -rf .venv
+  python3 -m venv .venv
+  if [ ! -f ".venv/bin/activate" ]; then
+    echo -e "${RED}❌ Failed to create virtual environment${NC}"
+    pause
+    return
+  fi
+
+  source .venv/bin/activate
+  pip install --upgrade pip || { echo -e "${RED}❌ pip upgrade failed${NC}"; deactivate; pause; return; }
+  pip install -r requirements.txt || { echo -e "${RED}❌ Package installation failed${NC}"; deactivate; pause; return; }
+  pip install jdatetime || { echo -e "${RED}❌ jdatetime installation failed${NC}"; deactivate; pause; return; }
+  deactivate
+
+  configure_env
 
   ensure_service
   sudo systemctl enable reseller-report-bot
@@ -137,7 +151,7 @@ stop_bot() {
 }
 
 update_bot() {
-  echo -e "${YELLOW}⬆️ Updating bot source...${NC}"
+  echo -e "${YELLOW}⚡️ Updating bot source...${NC}"
   sudo systemctl stop reseller-report-bot 2>/dev/null || true
 
   if [ ! -d "$INSTALL_DIR" ]; then
@@ -147,20 +161,32 @@ update_bot() {
   fi
 
   cd "$INSTALL_DIR"
-  # پشتیبان env و DB
-  cp .env /tmp/.env.backup 2>/dev/null || true
+  
+  echo -e "${BLUE}💾 Backing up database files...${NC}"
   cp *.db /tmp/ 2>/dev/null || true
 
+  echo -e "${BLUE}📥 Fetching latest version from GitHub...${NC}"
   git fetch --all
   git reset --hard origin/main
 
-  # بازگردانی env و DB
-  mv /tmp/.env.backup .env 2>/dev/null || true
+  echo -e "${BLUE}♻️ Restoring database files...${NC}"
   mv /tmp/*.db . 2>/dev/null || true
 
-  source .venv/bin/activate || true
+  echo -e "${BLUE}📦 Updating Python packages...${NC}"
+  if [ ! -d ".venv" ]; then
+    echo -e "${YELLOW}⚠️ Virtual environment not found. Creating new one...${NC}"
+    sudo apt install python3.10-venv -y
+    python3 -m venv .venv
+  fi
+
+  source .venv/bin/activate || { echo -e "${RED}❌ Failed to activate venv${NC}"; pause; return; }
   pip install --upgrade pip
-  pip install -r requirements.txt
+  pip install -r requirements.txt || { echo -e "${RED}❌ Package installation failed${NC}"; deactivate; pause; return; }
+  pip install jdatetime || { echo -e "${RED}❌ jdatetime installation failed${NC}"; deactivate; pause; return; }
+  deactivate
+
+  echo -e "\n${YELLOW}⚙️ Reconfiguring bot settings...${NC}"
+  configure_env
 
   ensure_service
   sudo systemctl enable reseller-report-bot
@@ -172,7 +198,7 @@ update_bot() {
 }
 
 status_bot() {
-echo -e "${GREEN}Bot Status ...${NC}"
+  echo -e "${GREEN}Bot Status ...${NC}"
   sudo systemctl status reseller-report-bot
 }
 
