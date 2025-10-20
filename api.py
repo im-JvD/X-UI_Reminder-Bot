@@ -12,7 +12,7 @@ WEBBASEPATH = os.getenv("WEBBASEPATH", "")
 if WEBBASEPATH and not WEBBASEPATH.startswith("/"):
     WEBBASEPATH = "/" + WEBBASEPATH
 
-LOGIN_URL = f"{PANEL_BASE}{WEBBASEPATH}/login"
+LOGIN_URL = f"{PANEL_BASE}{WEBBASEPATH}login"
 INB_LIST = f"{PANEL_BASE}{WEBBASEPATH}panel/api/inbounds/list"
 ONLINE = f"{PANEL_BASE}{WEBBASEPATH}panel/api/inbounds/onlines"
 
