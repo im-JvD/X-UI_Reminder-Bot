@@ -944,7 +944,7 @@ async def main():
         return
 
     # Schedule jobs
-    scheduler.add_job(send_full_reports, "cron", hour=20, minute=30)
+    scheduler.add_job(send_full_reports, "cron", hour=00, minute=00, timezone="Asia/Tehran")
     scheduler.add_job(check_for_changes, "interval", minutes=15)
     scheduler.add_job(api.login, "interval", hours=5, args=[LOGIN_URL])
     
