@@ -623,58 +623,76 @@ def _format_expired_msg_reseller(name: str) -> str:
     )
 
 async def send_full_reports():
-    # Resellers
+    # --- 1. پردازش ریسلرها ---
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     
-    reseller_ids = [r[0] for r in rows if r[0] not in SUPERADMINS]
+    # اطمینان حاصل کنید که سوپرادمین‌ها در لیست ریسلرها پردازش نشوند
+    reseller_ids = {r[0] for r in rows} - SUPERADMINS
 
-    for tg in reseller_ids:
-        async with aiosqlite.connect("data.db") as db:
-            ibs = await db.execute_fetchall("SELECT inbound_id FROM reseller_inbounds WHERE telegram_id=?", (tg,))
-        inbound_ids = [r[0] for r in ibs]
+    for tg_id in reseller_ids:
+        inbound_ids = await _get_scope_inbound_ids(tg_id)
         if not inbound_ids:
             continue
+        
         snap = build_snapshot(inbound_ids)
         report = format_main_report(snap["counts"], snap["usage"]) + f"\n\n{now_shamsi_str()}"
         kb = InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_report")]]
         )
+        
         try:
-            await bot.send_message(tg, report, reply_markup=kb)
+            await bot.send_message(tg_id, report, reply_markup=kb)
             await asyncio.sleep(0.2)
         except TelegramForbiddenError:
-            logging.warning(f"⚠️ کاربر {tg} ربات را بلاک کرده است. گزارش روزانه ارسال نشد.")
+            logging.warning(f"⚠️ کاربر ریسلر {tg_id} ربات را بلاک کرده است. گزارش روزانه ارسال نشد.")
         except Exception as e:
-            log_error(e) 
+            log_error(e)
+        
+        # ذخیره اسنپ‌شات برای ریسلر در هر صورت
         async with aiosqlite.connect("data.db") as db:
             await db.execute(
                 "INSERT OR REPLACE INTO last_reports(telegram_id, last_json, last_full_report) VALUES (?, ?, ?)",
-                (tg, json.dumps(snapshot), int(time.time()))
+                (tg_id, json.dumps(snap), int(time.time()))
             )
             await db.commit()
 
-    # Superadmins
-    all_ids = await _get_scope_inbound_ids(next(iter(SUPERADMINS)) if SUPERADMINS else 0)
-    if all_ids:
-        snap = build_snapshot(all_ids)
-        report = format_main_report(snap["counts"], snap["usage"]) + f"\n\n{now_shamsi_str()}"
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_report")]]
-        )
+    # --- 2. پردازش سوپرادمین‌ها ---
+    if not SUPERADMINS:
+        return # اگر سوپرادمینی تعریف نشده، خارج شو
+
+    # فقط یک بار اسنپ‌شات کلی را برای همه سوپرادمین‌ها بساز
+    # از شناسه اولین سوپرادمین برای گرفتن همه اینباندها استفاده می‌کنیم
+    all_inbound_ids = await _get_scope_inbound_ids(next(iter(SUPERADMINS)))
+    
+    if not all_inbound_ids:
+        logging.warning("هیچ اینباندی برای گزارش‌گیری به سوپرادمین‌ها یافت نشد.")
+        return
+
+    # اسنپ‌شات کلی ساخته می‌شود
+    superadmin_snap = build_snapshot(all_inbound_ids)
+    report_msg = format_main_report(superadmin_snap["counts"], superadmin_snap["usage"]) + f"\n\n{now_shamsi_str()}"
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_report")]]
+    )
+
+    # ارسال گزارش به تمام سوپرادمین‌ها
+    for admin_id in SUPERADMINS:
         try:
-            await bot.send_message(tg, report, reply_markup=kb)
+            await bot.send_message(admin_id, report_msg, reply_markup=kb)
             await asyncio.sleep(0.2)
         except TelegramForbiddenError:
-            logging.warning(f"⚠️ سوپرادمین {tg} ربات را بلاک کرده است. گزارش روزانه ارسال نشد.")
+            logging.warning(f"⚠️ سوپرادمین {admin_id} ربات را بلاک کرده است. گزارش روزانه ارسال نشد.")
         except Exception as e:
             log_error(e)
-            async with aiosqlite.connect("data.db") as db:
-                await db.execute(
-                    "INSERT OR REPLACE INTO last_reports(telegram_id, last_json, last_full_report) VALUES (?, ?, ?)",
-                    (tg, json.dumps(snap), int(time.time()))
-                )
-                await db.commit()
+        
+        # ذخیره اسنپ‌شات برای هر سوپرادمین
+        async with aiosqlite.connect("data.db") as db:
+            await db.execute(
+                "INSERT OR REPLACE INTO last_reports(telegram_id, last_json, last_full_report) VALUES (?, ?, ?)",
+                (admin_id, json.dumps(superadmin_snap), int(time.time()))
+            )
+            await db.commit()
 
 
 async def check_for_changes():
@@ -876,8 +894,8 @@ async def main():
         return
 
     # Schedule jobs
-    scheduler.add_job(send_full_reports, "cron", hour=20, minute=30)
-    scheduler.add_job(check_for_changes, "interval", minutes=15)
+    scheduler.add_job(send_full_reports, "cron", hour=12, minute=5)
+    scheduler.add_job(check_for_changes, "interval", minutes=1)
     scheduler.add_job(api.login, "interval", hours=5, args=[LOGIN_URL])
     
     scheduler.start()
