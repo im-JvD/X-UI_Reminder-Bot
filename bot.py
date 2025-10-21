@@ -785,6 +785,7 @@ async def check_for_changes():
 current_action: Dict[int, Tuple[str, Any]] = {}
 
 @dp.message(F.text)
+@dp.message(F.text)
 async def text_handler(m: Message):
     admin_id = m.from_user.id
     if admin_id not in SUPERADMINS:
@@ -812,10 +813,32 @@ async def text_handler(m: Message):
             async with aiosqlite.connect("data.db") as db:
                 for ib_id in inbound_ids:
                     await db.execute("INSERT OR IGNORE INTO reseller_inbounds(telegram_id, inbound_id) VALUES (?, ?)", (reseller_id, ib_id))
+                # اطمینان از اینکه نقش کاربر به ریسلر تغییر می‌کند
+                await db.execute("UPDATE users SET role='reseller' WHERE telegram_id=?", (reseller_id,))
                 await db.commit()
 
-            await m.answer(f"✅ اینباند(های) {', '.join(map(str, inbound_ids))} با موفقیت به ریسلر {reseller_id} اختصاص داده شد.")
+            inbounds_str = ', '.join(map(str, inbound_ids))
+            
+            # پیام تایید برای سوپرادمین
+            await m.answer(f"✅ اینباند(های) {inbounds_str} با موفقیت به ریسلر {reseller_id} اختصاص داده شد.")
+            
+            # --- بخش اضافه شده: ارسال پیام به ریسلر ---
+            try:
+                reseller_msg = (
+                    "🎉 تبریک! شما به عنوان ریسلر در ربات تعیین شدید.\n"
+                    f"اینباند(های) با شناسه <b>{inbounds_str}</b> به شما اختصاص داده شد.\n\n"
+                    "از این پس می‌توانید با استفاده از دکمه‌های ربات، گزارش‌های مربوط به اینباند(های) خود را دریافت کنید."
+                )
+                await bot.send_message(reseller_id, reseller_msg)
+            except (TelegramForbiddenError, TelegramBadRequest):
+                await m.answer(f"⚠️ <b>هشدار:</b> نتوانستم به ریسلر {reseller_id} پیام دهم. احتمالا ربات را بلاک کرده یا چت با او مقدور نیست.")
+            except Exception as e:
+                log_error(e)
+                await m.answer("⚠️ خطایی در ارسال پیام به ریسلر رخ داد. جزئیات در فایل لاگ ثبت شد.")
+            # -------------------------------------------
+                
             del current_action[admin_id]
+
         except ValueError:
             await m.answer("❌ شناسه اینباند باید عدد باشد. اگر چند شناسه وارد می‌کنید، با کاما جدا کنید. مثال: 1, 5, 12")
 
@@ -823,7 +846,7 @@ async def text_handler(m: Message):
         try:
             reseller_id = int(m.text)
             async with aiosqlite.connect("data.db") as db:
-                cur = await db.execute("SELECT 1 FROM reseller_inbounds WHERE telegram_id=?", (reseller_id,))
+                cur = await db.execute("SELECT 1 FROM users WHERE role='reseller' AND telegram_id=?", (reseller_id,))
                 if not await cur.fetchone():
                     await m.answer(f"❌ ریسلری با شناسه {reseller_id} یافت نشد.")
                     del current_action[admin_id]
@@ -847,7 +870,25 @@ async def text_handler(m: Message):
                     await db.execute("INSERT INTO reseller_inbounds(telegram_id, inbound_id) VALUES (?, ?)", (reseller_id, ib_id))
                 await db.commit()
 
-            await m.answer(f"✅ اینباند(های) ریسلر {reseller_id} با موفقیت به {', '.join(map(str, inbound_ids))} به‌روزرسانی شد.")
+            inbounds_str = ', '.join(map(str, inbound_ids))
+            
+            # پیام تایید برای سوپرادمین
+            await m.answer(f"✅ اینباند(های) ریسلر {reseller_id} با موفقیت به {inbounds_str} به‌روزرسانی شد.")
+            
+            # --- بخش اضافه شده: ارسال پیام به ریسلر ---
+            try:
+                reseller_msg = (
+                    "🔄 <b>اطلاعیه به‌روزرسانی</b>\n"
+                    f"لیست اینباندهای اختصاص یافته به شما به‌روزرسانی شد.\n"
+                    f"اینباند(های) جدید شما: <b>{inbounds_str}</b>"
+                )
+                await bot.send_message(reseller_id, reseller_msg)
+            except (TelegramForbiddenError, TelegramBadRequest):
+                await m.answer(f"⚠️ <b>هشدار:</b> نتوانستم به ریسلر {reseller_id} پیام دهم. احتمالا ربات را بلاک کرده است.")
+            except Exception as e:
+                log_error(e)
+            # -------------------------------------------
+
             del current_action[admin_id]
         except ValueError:
              await m.answer("❌ شناسه اینباند باید عدد باشد. اگر چند شناسه وارد می‌کنید، با کاما جدا کنید.")
@@ -856,16 +897,26 @@ async def text_handler(m: Message):
         try:
             reseller_id = int(m.text)
             async with aiosqlite.connect("data.db") as db:
-                cur = await db.execute("DELETE FROM reseller_inbounds WHERE telegram_id=?", (reseller_id,))
+                # حذف اینباندها و تغییر نقش به کاربر عادی
+                await db.execute("DELETE FROM reseller_inbounds WHERE telegram_id=?", (reseller_id,))
+                await db.execute("UPDATE users SET role='user' WHERE telegram_id=?", (reseller_id,))
                 await db.commit()
-                if cur.rowcount > 0:
-                    await m.answer(f"✅ ریسلر با شناسه {reseller_id} و تمام اینباندهای اختصاص‌یافته به او با موفقیت حذف شدند.")
-                else:
-                    await m.answer(f"ℹ️ ریسلری با شناسه {reseller_id} یافت نشد.")
+
+            await m.answer(f"✅ ریسلر با شناسه {reseller_id} با موفقیت حذف شد و به کاربر عادی تبدیل شد.")
+            
+            # --- بخش اضافه شده: ارسال پیام به کاربر ---
+            try:
+                user_msg = "❌ دسترسی شما به عنوان ریسلر حذف شد. شما به کاربر عادی تبدیل شدید و دیگر گزارشی دریافت نخواهید کرد."
+                await bot.send_message(reseller_id, user_msg)
+            except Exception:
+                pass # اگر نشد هم مهم نیست
+            # -----------------------------------------
+                
             del current_action[admin_id]
         except ValueError:
             await m.answer("❌ شناسه تلگرام باید یک عدد باشد.")
             del current_action[admin_id]
+
 
 @dp.callback_query(F.data == "add_reseller")
 async def add_reseller_callback(c: CallbackQuery):
