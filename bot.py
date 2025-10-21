@@ -1,3 +1,4 @@
+
 import os
 import asyncio
 import aiosqlite
@@ -76,6 +77,19 @@ bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
 
+current_action: Dict[int, Tuple[str, Any]] = {}
+
+MANAGE_RESELLERS_KB = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="➕ افزودن ریسلر جدید", callback_data="add_reseller")],
+        [InlineKeyboardButton(text="🔁 تغییر اینباند ریسلر", callback_data="edit_reseller")],
+        [InlineKeyboardButton(text="❌ حذف ریسلر", callback_data="delete_reseller")],
+        [InlineKeyboardButton(text="📜 لیست ریسلرها", callback_data="list_resellers")],
+])
+
+CANCEL_KB = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ لغو عملیات", callback_data="cancel_action")]
+])
+    
 def get_main_kb(user_id: int) -> ReplyKeyboardMarkup:
     if user_id in SUPERADMINS:
         return ReplyKeyboardMarkup(
@@ -154,10 +168,8 @@ def now_shamsi_str() -> str:
     tz = ZoneInfo("Asia/Tehran")
     now = datetime.now(tz)
     
-    # تبدیل به تاریخ شمسی
     shamsi = jdatetime.datetime.fromgregorian(datetime=now)
     
-    # نام ماه‌های فارسی
     month_names = {
         1: 'فروردین',
         2: 'اردیبهشت',
@@ -176,7 +188,7 @@ def now_shamsi_str() -> str:
     day = shamsi.day
     month = month_names[shamsi.month]
     year = shamsi.year
-    time_str = shamsi.strftime("%H:%M")
+    time_str = shamsi.strftime("%H:%M:%S")
     
     return f"تاریخ = [ {day} {month} {year} ] - ساعت = [ {time_str} ]"
     
@@ -375,9 +387,7 @@ async def start_cmd(m: Message):
                f"نام کاربری کاربر : {username}\n"
                f"آی‌دی عددی کاربر : {uid}\n"
                f"عضویت در ربات : {date_str}")
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="➕ اختصاص اینباند", callback_data=f"assign_inbound:{uid}")]]
-        )
+               
         for admin_id in SUPERADMINS:
             try:
                 await bot.send_message(admin_id, safe_text(txt), reply_markup=kb)
@@ -537,13 +547,6 @@ async def refresh_expired(query: CallbackQuery):
     else:
         await query.answer("ℹ️ بدون تغییر", show_alert=False)
 
-# ---------------- Button Handlers (added) ----------------
-MANAGE_RESELLERS_KB = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="➕ افزودن ریسلر جدید", callback_data="add_reseller")],
-    [InlineKeyboardButton(text="🔁 تغییر شناسه اینباند", callback_data="edit_reseller")],
-    [InlineKeyboardButton(text="❌ حذف ریسلر", callback_data="delete_reseller")],
-    [InlineKeyboardButton(text="⬅️ بازگشت به منوی اصلی", callback_data="back_main")]
-])
 
 @dp.message(F.text == "📊 گزارش کلی")
 async def btn_report(m: Message):
@@ -568,26 +571,147 @@ async def manage_resellers_menu(m: Message):
         return await m.answer("⛔️ این بخش فقط برای ادمین اصلی در دسترس است.")
     await m.answer("🧑‍💼 <b>مدیریت ادمین‌های ریسلر</b>\nگزینه مورد نظر را انتخاب کنید:", reply_markup=MANAGE_RESELLERS_KB)
 
+@dp.callback_query(F.data == "list_resellers")
+async def list_resellers_callback(c: CallbackQuery):
+    if c.from_user.id not in SUPERADMINS: return
+    async with aiosqlite.connect("data.db") as db:
+        cur = await db.execute("SELECT telegram_id, group_concat(inbound_id) FROM reseller_inbounds GROUP BY telegram_id")
+        rows = await cur.fetchall()
+    
+    if not rows:
+        await c.answer("ℹ️ هیچ ریسلری یافت نشد.", show_alert=True)
+        return
+
+    msg = "📜 <b>لیست ریسلرها و اینباندهایشان:</b>\n\n"
+    for row in rows:
+        msg += f"👤 <b>کاربر:</b> <code>{row[0]}</code>\n"
+        msg += f"📦 <b>اینباندها:</b> <code>{row[1]}</code>\n\n"
+
+    await c.message.edit_text(msg, reply_markup=MANAGE_RESELLERS_KB)
+    await c.answer()
+
 @dp.callback_query(F.data == "add_reseller")
 async def add_reseller_callback(c: CallbackQuery):
-    await c.message.answer("🆔 شناسه تلگرام ریسلر جدید را ارسال کنید:")
+    if c.from_user.id not in SUPERADMINS:
+        return
+    current_action[c.from_user.id] = ("get_reseller_id_for_add", None)
+    await c.message.edit_text(
+        "🆔 شناسه تلگرام کاربری که می‌خواهید ریسلر شود را ارسال کنید:",
+        reply_markup=CANCEL_KB
+    )
     await c.answer()
 
 @dp.callback_query(F.data == "edit_reseller")
 async def edit_reseller_callback(c: CallbackQuery):
-    await c.message.answer("🆔 شناسه تلگرام ریسلر را بفرستید تا شناسه اینباند جدید را تنظیم کنم:")
+    if c.from_user.id not in SUPERADMINS:
+        return
+    current_action[c.from_user.id] = ("get_reseller_id_for_edit", None)
+    await c.message.edit_text(
+        "🆔 شناسه تلگرام ریسلری که قصد ویرایش اینباندهایش را دارید، ارسال کنید:",
+        reply_markup=CANCEL_KB
+    )
     await c.answer()
 
 @dp.callback_query(F.data == "delete_reseller")
 async def delete_reseller_callback(c: CallbackQuery):
-    await c.message.answer("🆔 شناسه تلگرام ریسلری که می‌خواهید حذف شود را ارسال کنید:")
+    if c.from_user.id not in SUPERADMINS:
+        return
+    current_action[c.from_user.id] = ("get_reseller_id_for_delete", None)
+    await c.message.edit_text(
+        "🆔 شناسه تلگرام ریسلری که می‌خواهید حذف شود را ارسال کنید:",
+        reply_markup=CANCEL_KB
+    )
     await c.answer()
 
-@dp.callback_query(F.data == "back_main")
-async def back_to_main(c: CallbackQuery):
-    kb = get_main_kb(c.from_user.id)
-    await c.message.edit_text("↩️ بازگشت به منوی اصلی:", reply_markup=kb)
+@dp.callback_query(F.data == "cancel_action")
+async def cancel_action_callback(c: CallbackQuery):
+    admin_id = c.from_user.id
+    if admin_id in current_action:
+        del current_action[admin_id]
+    await c.message.edit_text(
+        "✅ عملیات لغو شد.\n\n🧑‍💼 <b>مدیریت ادمین‌های ریسلر</b>\nگزینه مورد نظر را انتخاب کنید:",
+        reply_markup=MANAGE_RESELLERS_KB
+    )
     await c.answer()
+
+@dp.message(F.text & F.from_user.id.in_(SUPERADMINS))
+async def universal_text_handler(m: Message):
+    admin_id = m.from_user.id
+    action_data = current_action.get(admin_id)
+
+    if not action_data:
+        return
+
+    action, target_id = action_data
+    text = m.text.strip()
+
+    if action in ("get_reseller_id_for_add", "get_reseller_id_for_edit", "get_reseller_id_for_delete"):
+        try:
+            reseller_id = int(text)
+        except ValueError:
+            await m.answer("❌ شناسه تلگرام باید یک عدد صحیح باشد. لطفاً دوباره تلاش کنید.", reply_markup=CANCEL_KB)
+            return
+
+        async with aiosqlite.connect("data.db") as db:
+            if action in ("get_reseller_id_for_edit", "get_reseller_id_for_delete"):
+                cur = await db.execute("SELECT 1 FROM reseller_inbounds WHERE telegram_id=?", (reseller_id,))
+                if not await cur.fetchone():
+                    await m.answer(f"❌ ریسلری با شناسه {reseller_id} یافت نشد. لطفاً دوباره تلاش کنید.", reply_markup=CANCEL_KB)
+                    return
+
+        if action == "get_reseller_id_for_add":
+            current_action[admin_id] = ("get_inbound_ids_for_add", reseller_id)
+            await m.answer(
+                f"✅ کاربر با شناسه {reseller_id} انتخاب شد.\n"
+                f"حالا شناسه اینباند(ها) را برای این کاربر ارسال کنید (می‌توانید چند شناسه را با کاما , جدا کنید).",
+                reply_markup=CANCEL_KB
+            )
+        elif action == "get_reseller_id_for_edit":
+            current_action[admin_id] = ("get_inbound_ids_for_edit", reseller_id)
+            await m.answer(
+                f"✅ ریسلر با شناسه {reseller_id} انتخاب شد.\n"
+                f"حالا لیست **جدید** شناسه‌های اینباند را برای او ارسال کنید (با کاما , جدا کنید). این لیست جایگزین لیست قبلی خواهد شد.",
+                reply_markup=CANCEL_KB
+            )
+        elif action == "get_reseller_id_for_delete":
+            async with aiosqlite.connect("data.db") as db:
+                await db.execute("DELETE FROM reseller_inbounds WHERE telegram_id=?", (reseller_id,))
+                await db.execute("UPDATE users SET role='user' WHERE telegram_id=?", (reseller_id,))
+                await db.commit()
+            del current_action[admin_id]
+            await m.answer(f"✅ ریسلر با شناسه {reseller_id} با موفقیت حذف شد.", reply_markup=MANAGE_RESELLERS_KB)
+
+    elif action in ("get_inbound_ids_for_add", "get_inbound_ids_for_edit"):
+        try:
+            inbound_ids = [int(i.strip()) for i in text.split(',') if i.strip()]
+            if not inbound_ids: raise ValueError("لیست اینباندها نمی‌تواند خالی باشد.")
+        except ValueError:
+            await m.answer("❌ ورودی نامعتبر است. لطفاً یک یا چند شناسه اینباند عددی را با کاما جدا کنید.", reply_markup=CANCEL_KB)
+            return
+
+        reseller_id = target_id
+        async with aiosqlite.connect("data.db") as db:
+            if action == "get_inbound_ids_for_add":
+                await db.execute("UPDATE users SET role=? WHERE telegram_id=?", ("reseller", reseller_id))
+                for inb_id in inbound_ids:
+                    await db.execute("INSERT OR IGNORE INTO reseller_inbounds(telegram_id, inbound_id) VALUES (?, ?)", (reseller_id, inb_id))
+                await db.commit()
+                msg = f"✅ کاربر {reseller_id} به عنوان ریسلر ثبت شد و اینباند(های) {', '.join(map(str, inbound_ids))} به او اختصاص یافت."
+
+            elif action == "get_inbound_ids_for_edit":
+                await db.execute("DELETE FROM reseller_inbounds WHERE telegram_id=?", (reseller_id,))
+                for inb_id in inbound_ids:
+                    await db.execute("INSERT INTO reseller_inbounds(telegram_id, inbound_id) VALUES (?, ?)", (reseller_id, inb_id))
+                await db.commit()
+                msg = f"✅ اینباندهای ریسلر {reseller_id} با موفقیت به {', '.join(map(str, inbound_ids))} به‌روزرسانی شد."
+
+        del current_action[admin_id]
+        await m.answer(msg, reply_markup=MANAGE_RESELLERS_KB)
+        try:
+            await bot.send_message(reseller_id, "✅ تنظیمات حساب ریسلری شما توسط ادمین به‌روزرسانی شد.")
+        except Exception as e:
+            log_error(e)
+
 
 # ---------------- Full Reports & Change Notifications ----------------
 def _format_expiring_msg_super(name: str) -> str:
@@ -623,11 +747,9 @@ def _format_expired_msg_reseller(name: str) -> str:
     )
 
 async def send_full_reports():
-    # --- 1. پردازش ریسلرها ---
     async with aiosqlite.connect("data.db") as db:
         rows = await db.execute_fetchall("SELECT DISTINCT telegram_id FROM reseller_inbounds")
     
-    # اطمینان حاصل کنید که سوپرادمین‌ها در لیست ریسلرها پردازش نشوند
     reseller_ids = {r[0] for r in rows} - SUPERADMINS
 
     for tg_id in reseller_ids:
@@ -649,7 +771,6 @@ async def send_full_reports():
         except Exception as e:
             log_error(e)
         
-        # ذخیره اسنپ‌شات برای ریسلر در هر صورت
         async with aiosqlite.connect("data.db") as db:
             await db.execute(
                 "INSERT OR REPLACE INTO last_reports(telegram_id, last_json, last_full_report) VALUES (?, ?, ?)",
@@ -657,26 +778,21 @@ async def send_full_reports():
             )
             await db.commit()
 
-    # --- 2. پردازش سوپرادمین‌ها ---
     if not SUPERADMINS:
-        return # اگر سوپرادمینی تعریف نشده، خارج شو
+        return 
 
-    # فقط یک بار اسنپ‌شات کلی را برای همه سوپرادمین‌ها بساز
-    # از شناسه اولین سوپرادمین برای گرفتن همه اینباندها استفاده می‌کنیم
     all_inbound_ids = await _get_scope_inbound_ids(next(iter(SUPERADMINS)))
     
     if not all_inbound_ids:
         logging.warning("هیچ اینباندی برای گزارش‌گیری به سوپرادمین‌ها یافت نشد.")
         return
 
-    # اسنپ‌شات کلی ساخته می‌شود
     superadmin_snap = build_snapshot(all_inbound_ids)
     report_msg = format_main_report(superadmin_snap["counts"], superadmin_snap["usage"]) + f"\n\n{now_shamsi_str()}"
     kb = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="♻️ بروزرسانی به آخرین وضعیت", callback_data="refresh_report")]]
     )
 
-    # ارسال گزارش به تمام سوپرادمین‌ها
     for admin_id in SUPERADMINS:
         try:
             await bot.send_message(admin_id, report_msg, reply_markup=kb)
@@ -686,7 +802,6 @@ async def send_full_reports():
         except Exception as e:
             log_error(e)
         
-        # ذخیره اسنپ‌شات برای هر سوپرادمین
         async with aiosqlite.connect("data.db") as db:
             await db.execute(
                 "INSERT OR REPLACE INTO last_reports(telegram_id, last_json, last_full_report) VALUES (?, ?, ?)",
@@ -781,159 +896,7 @@ async def check_for_changes():
     
     logging.info("✅ The entire Panel was Successfully reviewed.")
 
-# ---------------- Message Handlers for Reseller Management ----------------
-current_action: Dict[int, Tuple[str, Any]] = {}
 
-@dp.message(F.text)
-async def text_handler(m: Message):
-    admin_id = m.from_user.id
-    if admin_id not in SUPERADMINS:
-        return
-    if admin_id not in current_action:
-        return
-    
-    action, target_user = current_action[admin_id]
-    
-    if action == "add_reseller":
-        try:
-            reseller_id = int(m.text)
-            current_action[admin_id] = ("assign_inbound_for_add", reseller_id)
-            await m.answer(f"✅ ریسلر با شناسه {reseller_id} ثبت شد.\nحالا شناسه اینباند(ها) را برای این ریسلر ارسال کنید (می‌توانید چند شناسه را با کاما , جدا کنید).")
-        except ValueError:
-            await m.answer("❌ شناسه تلگرام باید یک عدد باشد. لطفاً دوباره تلاش کنید.")
-            del current_action[admin_id]
-
-    elif action == "assign_inbound_for_add":
-        try:
-            inbound_ids_str = m.text.split(',')
-            inbound_ids = [int(i.strip()) for i in inbound_ids_str]
-            reseller_id = target_user
-            
-            async with aiosqlite.connect("data.db") as db:
-                for ib_id in inbound_ids:
-                    await db.execute("INSERT OR IGNORE INTO reseller_inbounds(telegram_id, inbound_id) VALUES (?, ?)", (reseller_id, ib_id))
-                # اطمینان از اینکه نقش کاربر به ریسلر تغییر می‌کند
-                await db.execute("UPDATE users SET role='reseller' WHERE telegram_id=?", (reseller_id,))
-                await db.commit()
-
-            inbounds_str = ', '.join(map(str, inbound_ids))
-            
-            # پیام تایید برای سوپرادمین
-            await m.answer(f"✅ اینباند(های) {inbounds_str} با موفقیت به ریسلر {reseller_id} اختصاص داده شد.")
-            
-            # --- بخش اضافه شده: ارسال پیام به ریسلر ---
-            try:
-                reseller_msg = (
-                    "🎉 تبریک! شما به عنوان ریسلر در ربات تعیین شدید.\n"
-                    f"اینباند(های) با شناسه <b>{inbounds_str}</b> به شما اختصاص داده شد.\n\n"
-                    "از این پس می‌توانید با استفاده از دکمه‌های ربات، گزارش‌های مربوط به اینباند(های) خود را دریافت کنید."
-                )
-                await bot.send_message(reseller_id, reseller_msg)
-            except (TelegramForbiddenError, TelegramBadRequest):
-                await m.answer(f"⚠️ <b>هشدار:</b> نتوانستم به ریسلر {reseller_id} پیام دهم. احتمالا ربات را بلاک کرده یا چت با او مقدور نیست.")
-            except Exception as e:
-                log_error(e)
-                await m.answer("⚠️ خطایی در ارسال پیام به ریسلر رخ داد. جزئیات در فایل لاگ ثبت شد.")
-            # -------------------------------------------
-                
-            del current_action[admin_id]
-
-        except ValueError:
-            await m.answer("❌ شناسه اینباند باید عدد باشد. اگر چند شناسه وارد می‌کنید، با کاما جدا کنید. مثال: 1, 5, 12")
-
-    elif action == "edit_reseller":
-        try:
-            reseller_id = int(m.text)
-            async with aiosqlite.connect("data.db") as db:
-                cur = await db.execute("SELECT 1 FROM users WHERE role='reseller' AND telegram_id=?", (reseller_id,))
-                if not await cur.fetchone():
-                    await m.answer(f"❌ ریسلری با شناسه {reseller_id} یافت نشد.")
-                    del current_action[admin_id]
-                    return
-            
-            current_action[admin_id] = ("assign_inbound_for_edit", reseller_id)
-            await m.answer(f"🔄 لطفاً شناسه اینباند(های) جدید را برای ریسلر {reseller_id} ارسال کنید. توجه: تمام اینباندهای قبلی حذف خواهند شد.")
-        except ValueError:
-            await m.answer("❌ شناسه تلگرام باید یک عدد باشد.")
-            del current_action[admin_id]
-
-    elif action == "assign_inbound_for_edit":
-        try:
-            inbound_ids_str = m.text.split(',')
-            inbound_ids = [int(i.strip()) for i in inbound_ids_str]
-            reseller_id = target_user
-            
-            async with aiosqlite.connect("data.db") as db:
-                await db.execute("DELETE FROM reseller_inbounds WHERE telegram_id=?", (reseller_id,))
-                for ib_id in inbound_ids:
-                    await db.execute("INSERT INTO reseller_inbounds(telegram_id, inbound_id) VALUES (?, ?)", (reseller_id, ib_id))
-                await db.commit()
-
-            inbounds_str = ', '.join(map(str, inbound_ids))
-            
-            # پیام تایید برای سوپرادمین
-            await m.answer(f"✅ اینباند(های) ریسلر {reseller_id} با موفقیت به {inbounds_str} به‌روزرسانی شد.")
-            
-            # --- بخش اضافه شده: ارسال پیام به ریسلر ---
-            try:
-                reseller_msg = (
-                    "🔄 <b>اطلاعیه به‌روزرسانی</b>\n"
-                    f"لیست اینباندهای اختصاص یافته به شما به‌روزرسانی شد.\n"
-                    f"اینباند(های) جدید شما: <b>{inbounds_str}</b>"
-                )
-                await bot.send_message(reseller_id, reseller_msg)
-            except (TelegramForbiddenError, TelegramBadRequest):
-                await m.answer(f"⚠️ <b>هشدار:</b> نتوانستم به ریسلر {reseller_id} پیام دهم. احتمالا ربات را بلاک کرده است.")
-            except Exception as e:
-                log_error(e)
-            # -------------------------------------------
-
-            del current_action[admin_id]
-        except ValueError:
-             await m.answer("❌ شناسه اینباند باید عدد باشد. اگر چند شناسه وارد می‌کنید، با کاما جدا کنید.")
-    
-    elif action == "delete_reseller":
-        try:
-            reseller_id = int(m.text)
-            async with aiosqlite.connect("data.db") as db:
-                # حذف اینباندها و تغییر نقش به کاربر عادی
-                await db.execute("DELETE FROM reseller_inbounds WHERE telegram_id=?", (reseller_id,))
-                await db.execute("UPDATE users SET role='user' WHERE telegram_id=?", (reseller_id,))
-                await db.commit()
-
-            await m.answer(f"✅ ریسلر با شناسه {reseller_id} با موفقیت حذف شد و به کاربر عادی تبدیل شد.")
-            
-            # --- بخش اضافه شده: ارسال پیام به کاربر ---
-            try:
-                user_msg = "❌ دسترسی شما به عنوان ریسلر حذف شد. شما به کاربر عادی تبدیل شدید و دیگر گزارشی دریافت نخواهید کرد."
-                await bot.send_message(reseller_id, user_msg)
-            except Exception:
-                pass # اگر نشد هم مهم نیست
-            # -----------------------------------------
-                
-            del current_action[admin_id]
-        except ValueError:
-            await m.answer("❌ شناسه تلگرام باید یک عدد باشد.")
-            del current_action[admin_id]
-
-
-@dp.callback_query(F.data == "add_reseller")
-async def add_reseller_callback(c: CallbackQuery):
-    current_action[c.from_user.id] = ("add_reseller", None)
-    await c.message.answer("🆔 شناسه تلگرام ریسلر جدید را ارسال کنید:")
-    await c.answer()
-
-@dp.callback_query(F.data == "edit_reseller")
-async def edit_reseller_callback(c: CallbackQuery):
-    current_action[c.from_user.id] = ("edit_reseller", None)
-    await c.message.answer("🆔 شناسه تلگرام ریسلر را بفرستید تا شناسه اینباند جدید را تنظیم کنم:")
-    await c.answer()
-
-@dp.callback_query(F.data == "delete_reseller")
-async def delete_reseller_callback(c: CallbackQuery):
-    current_action[c.from_user.id] = ("delete_reseller", None)
-    await c.message.answer("🆔 شناسه تلگرام ریسلری که می‌خواهید حذف شود را ارسال کنید:")
-    await c.answer()
 
 # ---------------- Main Loop ----------------
 async def main():
@@ -943,7 +906,6 @@ async def main():
         logging.error("FATAL: Could not log in to the panel. Check credentials and URL in .env file.")
         return
 
-    # Schedule jobs
     scheduler.add_job(send_full_reports, "cron", hour=00, minute=00, timezone="Asia/Tehran")
     scheduler.add_job(check_for_changes, "interval", minutes=15)
     scheduler.add_job(api.login, "interval", hours=5, args=[LOGIN_URL])
