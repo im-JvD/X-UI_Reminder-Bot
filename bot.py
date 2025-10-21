@@ -785,7 +785,6 @@ async def check_for_changes():
 current_action: Dict[int, Tuple[str, Any]] = {}
 
 @dp.message(F.text)
-@dp.message(F.text)
 async def text_handler(m: Message):
     admin_id = m.from_user.id
     if admin_id not in SUPERADMINS:
