@@ -180,6 +180,9 @@ update_bot() {
     sudo apt install python3.10-venv -y
     python3 -m venv .venv
   fi
+  sudo rm -rf Pic
+  sudo rm installer.sh
+  sudo rm README.md
 
   source .venv/bin/activate || { echo -e "${RED}❌ Failed to activate venv${NC}"; pause; return; }
   pip install --upgrade pip
