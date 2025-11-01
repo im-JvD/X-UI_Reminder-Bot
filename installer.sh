@@ -19,7 +19,7 @@ show_menu() {
   clear
   echo -e "${BLUE}========================================${NC}"
   echo -e "${GREEN}  X-UI Reseller Reminder Bot Manager   ${NC}"
-  echo -e "${YELLOW}    BOT Version [${GREEN} 1.5.7 ${YELLOW}]   ${NC}"
+  echo -e "${YELLOW}    BOT Version [${GREEN} 1.6.7 ${YELLOW}]   ${NC}"
   echo -e "${BLUE}========================================${NC}"
   echo -e ""
   echo -e "   ${GREEN}1 ${NC}-${YELLOW} Install Bot${NC}"
@@ -55,44 +55,43 @@ EOF
   sudo systemctl daemon-reload
 }
 
+    # In installer.sh, modify configure_env function
+    
 configure_env() {
   echo -e "${YELLOW}🔐 Please enter required information:${NC}"
   read -p "Telegram Bot Token: " BOT_TOKEN
-  read -p "Required Channel Username or ID (e.g. @MyChannel): " CHANNEL
+  read -p "Required Channel Username or ID (e.g. @MyChannel or leave empty): " CHANNEL
   read -p "Super Admin Telegram ID(s, comma separated): " SUPERADMIN
-  echo ""
-  echo -e "${YELLOW}Enter your FULL X-UI panel URL (including schema, port, and base path if any):${NC}"
-  echo -e "${BLUE}Example:${NC} https://sub.example.com:2053/webbasepath"
-  read -p "Panel Full URL: " FULL_URL
-  read -p "Panel Username: " PANEL_USER
-  read -p "Panel Password: " PANEL_PASS
-
-  PANEL_BASE=$(echo $FULL_URL | sed -E 's#(https?://[^/]+).*#\1#')
-  WEBBASEPATH=$(echo $FULL_URL | sed -E 's#https?://[^/]+(/.*)?#\1#')
-  [ "$WEBBASEPATH" = "/" ] && WEBBASEPATH=""
-
-  echo -e "${GREEN}✅ Detected PANEL_BASE=$PANEL_BASE${NC}"
-  echo -e "${GREEN}✅ Detected WEBBASEPATH=${WEBBASEPATH:-'(none)'}${NC}"
-
+    
   rm -f "$INSTALL_DIR/.env"
-
+    
   cat > "$INSTALL_DIR/.env" <<EOF
-  
+# BotFather توکن دریافتی از ربات
 BOT_TOKEN=$BOT_TOKEN
+
+# آیدی کانال عضویت اجباری
 REQUIRED_CHANNEL_ID=$CHANNEL
+
+# Super Admin شناسه عددی تلگرام 
 SUPERADMINS=$SUPERADMIN
 
-PANEL_BASE=$PANEL_BASE
-WEBBASEPATH=$WEBBASEPATH/
-PANEL_USERNAME=$PANEL_USER
-PANEL_PASSWORD=$PANEL_PASS
-
+# تنظیم مقدار جهت ارسال نوتفیکیشن برای اشتراک هایی که کمتر از ... روز از تاریخ انقضای اشتراکشان باقی مانده
 EXPIRING_DAYS_THRESHOLD=1
+
+#  تنظیم مقدار جهت ارسال نوتفیکیشن برای اشتراک هایی که کمتر از ... گیگ از ترافیک اشتراکشان باقی مانده
 EXPIRING_GB_THRESHOLD=1
 
+# تنظیم ساعت ارسال گزارش روزانه - [ 24 ساعته به وقت تهران ] - از 0 تا 23
+DAILY_REPORT_HOUR=0
+
+# تنظیم دقیقه ارسال گزارش روزانه - از 0 تا 59
+DAILY_REPORT_MINUTE=0
+
+# تنظیم مقدار کرون جاب برای بررسی دیتابیس و ارسال نوتفیکیشن ها - از 1 تا 59 دقیقه - دقت کنید که هرچی زمان بررسی کمتر باشد ، میزان مصرف رم سرور افزایش می‌یابد
+CHANGE_CHECK_INTERVAL_MINUTES=8
 EOF
 
-  echo -e "${GREEN}✅ Configuration file (.env) created successfully!${NC}"
+  echo -e "${GREEN}✅ Configuration file (.env) Created Successfully!${NC}"
 }
 
 install_bot() {
@@ -113,6 +112,9 @@ install_bot() {
     pause
     return
   fi
+  sudo rm -rf Pic
+  sudo rm installer.sh
+  sudo rm README.md
 
   source .venv/bin/activate
   pip install --upgrade pip || { echo -e "${RED}❌ pip upgrade failed${NC}"; deactivate; pause; return; }
