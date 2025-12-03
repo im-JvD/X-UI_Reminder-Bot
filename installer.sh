@@ -19,7 +19,7 @@ show_menu() {
   clear
   echo -e "${BLUE}========================================${NC}"
   echo -e "${GREEN}  X-UI Reseller Reminder Bot Manager   ${NC}"
-  echo -e "${YELLOW}    BOT Version [${GREEN} 1.6.7 ${YELLOW}]   ${NC}"
+  echo -e "${YELLOW}    BOT Version [${GREEN} 2.0.0 ${YELLOW}]   ${NC}"
   echo -e "${BLUE}========================================${NC}"
   echo -e ""
   echo -e "   ${GREEN}1 ${NC}-${YELLOW} Install Bot${NC}"
@@ -66,29 +66,51 @@ configure_env() {
   rm -f "$INSTALL_DIR/.env"
     
   cat > "$INSTALL_DIR/.env" <<EOF
-# BotFather توکن دریافتی از ربات
+# ============================================
+# Telegram Bot Configuration
+# ============================================
+# Bot token from @BotFather
 BOT_TOKEN=$BOT_TOKEN
 
-# آیدی کانال عضویت اجباری
+# Required channel ID for membership check (optional)
+# Example: @YourChannel or -1001234567890
 REQUIRED_CHANNEL_ID=$CHANNEL
 
-# Super Admin شناسه عددی تلگرام 
+# Superadmin Telegram IDs (comma separated)
+# Example: 123456789,987654321
 SUPERADMINS=$SUPERADMIN
 
-# تنظیم مقدار جهت ارسال نوتفیکیشن برای اشتراک هایی که کمتر از ... روز از تاریخ انقضای اشتراکشان باقی مانده
+
+# ============================================
+# Notification Thresholds
+# ============================================
+# Days remaining threshold for expiring users
 EXPIRING_DAYS_THRESHOLD=1
 
-#  تنظیم مقدار جهت ارسال نوتفیکیشن برای اشتراک هایی که کمتر از ... گیگ از ترافیک اشتراکشان باقی مانده
+# GB remaining threshold for expiring users
 EXPIRING_GB_THRESHOLD=1
 
-# تنظیم ساعت ارسال گزارش روزانه - [ 24 ساعته به وقت تهران ] - از 0 تا 23
-DAILY_REPORT_HOUR=0
 
-# تنظیم دقیقه ارسال گزارش روزانه - از 0 تا 59
-DAILY_REPORT_MINUTE=0
+# ============================================
+# Scheduler Configuration
+# ============================================
+# Daily report time (24-hour format, Tehran timezone)
+# Hour: 0-23
+DAILY_REPORT_HOUR=23
 
-# تنظیم مقدار کرون جاب برای بررسی دیتابیس و ارسال نوتفیکیشن ها - از 1 تا 59 دقیقه - دقت کنید که هرچی زمان بررسی کمتر باشد ، میزان مصرف رم سرور افزایش می‌یابد
+# Minute: 0-59
+DAILY_REPORT_MINUTE=59
+
+# Change detection interval in minutes (recommended: 5-15)
+# Lower values = more frequent checks = higher RAM usage
 CHANGE_CHECK_INTERVAL_MINUTES=8
+
+
+# ============================================
+# Database Configuration (optional)
+# ============================================
+# Database file path (default: data.db in project root)
+# DATABASE_PATH=data.db
 EOF
 
   echo -e "${GREEN}✅ Configuration file (.env) Created Successfully!${NC}"
@@ -114,9 +136,12 @@ install_bot() {
   fi
   sudo rm -rf Pic
   sudo rm installer.sh
+  sudo rm api.py
   sudo rm README.md
 
   source .venv/bin/activate
+  find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+  find . -type f -name "*.pyc" -delete
   pip install --upgrade pip || { echo -e "${RED}❌ pip upgrade failed${NC}"; deactivate; pause; return; }
   pip install -r requirements.txt || { echo -e "${RED}❌ Package installation failed${NC}"; deactivate; pause; return; }
   pip install jdatetime || { echo -e "${RED}❌ jdatetime installation failed${NC}"; deactivate; pause; return; }
@@ -182,9 +207,12 @@ update_bot() {
   fi
   sudo rm -rf Pic
   sudo rm installer.sh
+  sudo rm api.py
   sudo rm README.md
 
   source .venv/bin/activate || { echo -e "${RED}❌ Failed to activate venv${NC}"; pause; return; }
+  find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+  find . -type f -name "*.pyc" -delete
   pip install --upgrade pip
   pip install -r requirements.txt || { echo -e "${RED}❌ Package installation failed${NC}"; deactivate; pause; return; }
   pip install jdatetime || { echo -e "${RED}❌ jdatetime installation failed${NC}"; deactivate; pause; return; }

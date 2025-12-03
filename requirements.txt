@@ -1,7 +1,25 @@
-aiogram>=3.7
-requests
-apscheduler
-python-dotenv
-aiosqlite
-tzlocal
-jdatetime 
+# Telegram Bot Framework
+aiogram>=3.7.0
+
+# HTTP Requests
+aiohttp>=3.9.0
+requests>=2.31.0
+
+# Database
+aiosqlite>=0.19.0
+
+# Scheduling
+apscheduler>=3.10.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Timezone
+tzlocal>=5.0
+pytz>=2024.1
+
+# Persian Date
+jdatetime>=4.1.0
+
+# Type hints (Python 3.10+)
+typing-extensions>=4.9.0
