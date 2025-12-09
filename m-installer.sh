@@ -2,7 +2,6 @@
 
 # ==========================================
 # X-UI Reminder Bot Multi-Instance Installer
-# Modified based on original script
 # ==========================================
 
 REPO="https://github.com/im-JvD/X-UI_Reminder-Bot.git"
@@ -327,7 +326,7 @@ show_menu() {
   echo -e "   ${GREEN}3 ${NC}-${YELLOW} Stop Bot's${NC}"
   echo -e "   ${GREEN}4 ${NC}-${YELLOW} Update Bot's ${NC}"
   echo -e "   ${GREEN}5 ${NC}-${YELLOW} Show Bot's Status${NC}"
-  echo -e " ${GREEN}6 ${NC}- ${RED}Remove Bot'sod ${NC}"
+  echo -e " ${GREEN}6 ${NC}- ${RED}Remove Bot's${NC}"
   echo -e " ${GREEN}7 ${NC}- ${NC}Show Live Logs"
   echo -e " ${GREEN}0 ${NC}- ${BLUE}Exit ${NC}"
   echo -e ""
